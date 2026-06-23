@@ -8,32 +8,35 @@
   @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;900&family=Barlow:wght@400;500;600&display=swap');
 
   :root {
-    --fire: #FF6B00;
-    --gold: #FFB800;
-    --navy: #0D1B3E;
-    --court: #1A2F6B;
-    --sky: #3B82F6;
-    --bg: #07112B;
-    --card: #0F1E45;
-    --border: #1E3A7A;
-    --text: #E8EEFF;
-    --muted: #7A8CB8;
+    --fire: #FF6200;
+    --gold: #FFC107;
+    --navy: #1A0A4A;
+    --court: #2D1B6B;
+    --sky: #5B6FD4;
+    --bg: #100730;
+    --card: #1C0F45;
+    --border: #3D2A7A;
+    --text: #F0EEFF;
+    --muted: #9080C8;
     --danger: #EF4444;
     --success: #22C55E;
+    --purple: #6B21D6;
+    --violet: #9333EA;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
     font-family: 'Barlow', sans-serif;
-    background: var(--bg);
+    background: linear-gradient(160deg, #100730 0%, #0D051F 100%);
+    background-attachment: fixed;
     color: var(--text);
     min-height: 100vh;
   }
 
   /* NAV */
   nav {
-    background: linear-gradient(90deg, var(--navy) 0%, #0a1635 100%);
+    background: linear-gradient(90deg, #1A0A4A 0%, #2D1060 50%, #1A0A4A 100%);
     border-bottom: 2px solid var(--fire);
     padding: 0 24px;
     display: flex;
@@ -103,24 +106,44 @@
   .hero {
     position: relative;
     overflow: hidden;
-    padding: 60px 24px 50px;
+    padding: 48px 24px 56px;
     text-align: center;
-    background: linear-gradient(180deg, #0D1B3E 0%, var(--bg) 100%);
+    background: linear-gradient(180deg, #2D0D6B 0%, #1A0A4A 40%, var(--bg) 100%);
   }
 
   .hero::before {
     content: '';
     position: absolute;
     inset: 0;
-    background: radial-gradient(ellipse at 50% 0%, rgba(255,107,0,.25) 0%, transparent 70%);
+    background:
+      radial-gradient(ellipse at 50% -10%, rgba(255,98,0,.35) 0%, transparent 55%),
+      radial-gradient(ellipse at 10% 50%, rgba(107,33,214,.3) 0%, transparent 50%),
+      radial-gradient(ellipse at 90% 50%, rgba(91,111,212,.25) 0%, transparent 50%);
     pointer-events: none;
   }
 
+  .hero-banner-wrap {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 28px;
+  }
+
+  .hero-banner-wrap::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, var(--fire), var(--gold), var(--violet), var(--sky));
+    z-index: -1;
+    filter: blur(18px);
+    opacity: .7;
+  }
+
   .hero img {
-    width: min(700px, 100%);
+    width: min(760px, 100%);
     border-radius: 12px;
-    margin-bottom: 32px;
-    box-shadow: 0 8px 60px rgba(255,107,0,.3);
+    display: block;
+    box-shadow: 0 12px 60px rgba(107,33,214,.4), 0 4px 30px rgba(255,98,0,.3);
   }
 
   .hero h1 {
@@ -260,7 +283,7 @@
 
   .spots-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--fire), var(--gold));
+    background: linear-gradient(90deg, var(--purple), var(--fire), var(--gold));
     border-radius: 100px;
     transition: width .5s;
   }
@@ -553,7 +576,9 @@
 <!-- ======================== HOME PAGE ======================== -->
 <div class="page active" id="page-home">
   <div class="hero">
-    <img src="ol_banner.png" alt="Oak Lawn Indoor Volleyball" onerror="this.style.display='none'">
+    <div class="hero-banner-wrap">
+      <img src="ol_banner.png" alt="Oak Lawn Indoor Volleyball">
+    </div>
     <h1>Open Gym Volleyball</h1>
     <p>Join Oak Lawn's indoor volleyball community — sign up for open gyms, track your spot, and play.</p>
     <div class="hero-btns">
@@ -664,7 +689,7 @@
       <div class="form-divider">or</div>
       <div class="form-group">
         <label>Email</label>
-        <input type="email" id="loginEmail" placeholder="you@gmail.com">
+        <input type="email" id="loginEmail" placeholder="you@email.com">
       </div>
       <div class="form-group">
         <label>Password</label>
@@ -691,9 +716,9 @@
         </div>
       </div>
       <div class="form-group">
-        <label>Gmail Address</label>
-        <input type="email" id="regEmail" placeholder="you@gmail.com">
-        <div class="form-hint">Must be a @gmail.com address</div>
+        <label>Email Address</label>
+        <input type="email" id="regEmail" placeholder="you@email.com">
+        <div class="form-hint">Any valid email address</div>
       </div>
       <div class="form-group">
         <label>Password</label>
@@ -724,9 +749,9 @@
         <div class="form-group"><label>Last Name</label><input type="text" id="reg2Last" placeholder="Johnson"></div>
       </div>
       <div class="form-group">
-        <label>Gmail Address</label>
-        <input type="email" id="reg2Email" placeholder="you@gmail.com">
-        <div class="form-hint">Must be a @gmail.com address</div>
+        <label>Email Address</label>
+        <input type="email" id="reg2Email" placeholder="you@email.com">
+        <div class="form-hint">Any valid email address</div>
       </div>
       <div class="form-group">
         <label>Password</label>
@@ -735,7 +760,7 @@
       <button class="btn btn-primary btn-full" onclick="register2()" style="margin-top:4px">Create Account</button>
     </div>
     <div id="login2" style="display:none">
-      <div class="form-group"><label>Email</label><input type="email" id="login2Email" placeholder="you@gmail.com"></div>
+      <div class="form-group"><label>Email</label><input type="email" id="login2Email" placeholder="you@email.com"></div>
       <div class="form-group"><label>Password</label><input type="password" id="login2Password" placeholder="••••••••"></div>
       <button class="btn btn-primary btn-full" onclick="login2()">Log In</button>
     </div>
@@ -843,9 +868,13 @@ function register2() {
   doRegister(first, last, email, pass, 'signupModal');
 }
 
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 function doRegister(first, last, email, pass, modalId) {
   if (!first || !last || !email || !pass) return showToast('All fields are required.', true);
-  if (!email.toLowerCase().endsWith('@gmail.com')) return showToast('Must use a @gmail.com address.', true);
+  if (!isValidEmail(email)) return showToast('Please enter a valid email address.', true);
   if (pass.length < 8) return showToast('Password must be at least 8 characters.', true);
 
   const users = getData('users', {});
