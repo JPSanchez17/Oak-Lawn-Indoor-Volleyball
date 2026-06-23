@@ -34,7 +34,6 @@
     min-height: 100vh;
   }
 
-  /* NAV */
   nav {
     background: linear-gradient(90deg, #1A0A4A 0%, #2D1060 50%, #1A0A4A 100%);
     border-bottom: 2px solid var(--fire);
@@ -59,11 +58,7 @@
     text-transform: uppercase;
   }
 
-  .nav-links {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
+  .nav-links { display: flex; gap: 6px; align-items: center; }
 
   .nav-btn {
     background: none;
@@ -81,13 +76,7 @@
   }
   .nav-btn:hover, .nav-btn.active { color: var(--gold); background: rgba(255,184,0,.08); }
 
-  .nav-user {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 14px;
-    color: var(--muted);
-  }
+  .nav-user { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
 
   .badge {
     background: linear-gradient(135deg, var(--fire), var(--gold));
@@ -98,11 +87,9 @@
     font-size: 12px;
   }
 
-  /* PAGES */
   .page { display: none; }
   .page.active { display: block; }
 
-  /* HERO */
   .hero {
     position: relative;
     overflow: hidden;
@@ -122,12 +109,7 @@
     pointer-events: none;
   }
 
-  .hero-banner-wrap {
-    position: relative;
-    display: inline-block;
-    margin-bottom: 28px;
-  }
-
+  .hero-banner-wrap { position: relative; display: inline-block; margin-bottom: 28px; }
   .hero-banner-wrap::after {
     content: '';
     position: absolute;
@@ -163,15 +145,9 @@
     margin-bottom: 12px;
   }
 
-  .hero p {
-    color: var(--muted);
-    font-size: 18px;
-    margin-bottom: 32px;
-  }
-
+  .hero p { color: var(--muted); font-size: 18px; margin-bottom: 32px; }
   .hero-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 
-  /* BUTTONS */
   .btn {
     padding: 12px 28px;
     border-radius: 8px;
@@ -185,38 +161,18 @@
     letter-spacing: .5px;
   }
 
-  .btn-primary {
-    background: linear-gradient(135deg, var(--fire), var(--gold));
-    color: #000;
-  }
+  .btn-primary { background: linear-gradient(135deg, var(--fire), var(--gold)); color: #000; }
   .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(255,107,0,.5); }
-
-  .btn-outline {
-    background: transparent;
-    border: 2px solid var(--border);
-    color: var(--text);
-  }
+  .btn-outline { background: transparent; border: 2px solid var(--border); color: var(--text); }
   .btn-outline:hover { border-color: var(--sky); color: var(--sky); }
-
-  .btn-danger {
-    background: var(--danger);
-    color: #fff;
-  }
+  .btn-danger { background: var(--danger); color: #fff; }
   .btn-danger:hover { background: #dc2626; }
-
-  .btn-success {
-    background: var(--success);
-    color: #000;
-    font-weight: 700;
-  }
-
+  .btn-success { background: var(--success); color: #000; font-weight: 700; }
   .btn-sm { padding: 7px 16px; font-size: 13px; }
   .btn-full { width: 100%; }
 
-  /* CONTAINER */
   .container { max-width: 1000px; margin: 0 auto; padding: 32px 24px; }
 
-  /* SECTION TITLE */
   .section-title {
     font-family: 'Barlow Condensed', sans-serif;
     font-weight: 900;
@@ -229,7 +185,6 @@
 
   .section-sub { color: var(--muted); margin-bottom: 28px; font-size: 15px; }
 
-  /* CARDS */
   .card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -238,7 +193,6 @@
     margin-bottom: 16px;
   }
 
-  /* EVENT CARDS */
   .event-card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -277,24 +231,10 @@
 
   .event-meta { color: var(--muted); font-size: 14px; display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
 
-  .spots-bar {
-    height: 6px;
-    background: var(--border);
-    border-radius: 100px;
-    overflow: hidden;
-    margin-top: 8px;
-  }
-
-  .spots-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--purple), var(--fire), var(--gold));
-    border-radius: 100px;
-    transition: width .5s;
-  }
-
+  .spots-bar { height: 6px; background: var(--border); border-radius: 100px; overflow: hidden; margin-top: 8px; }
+  .spots-fill { height: 100%; background: linear-gradient(90deg, var(--purple), var(--fire), var(--gold)); border-radius: 100px; transition: width .5s; }
   .event-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
 
-  /* ROSTER PAGE */
   .roster-event-select {
     background: var(--card);
     border: 1px solid var(--border);
@@ -308,11 +248,7 @@
     cursor: pointer;
   }
 
-  .roster-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
+  .roster-table { width: 100%; border-collapse: collapse; }
   .roster-table th {
     text-align: left;
     padding: 10px 16px;
@@ -322,19 +258,11 @@
     color: var(--muted);
     border-bottom: 1px solid var(--border);
   }
-
-  .roster-table td {
-    padding: 12px 16px;
-    border-bottom: 1px solid rgba(30,58,122,.4);
-    font-size: 15px;
-  }
-
+  .roster-table td { padding: 12px 16px; border-bottom: 1px solid rgba(30,58,122,.4); font-size: 15px; }
   .roster-table tr:last-child td { border-bottom: none; }
   .roster-table tr:hover td { background: rgba(255,107,0,.04); }
 
-  /* FORMS */
   .form-group { margin-bottom: 18px; }
-
   .form-group label {
     display: block;
     font-size: 13px;
@@ -344,8 +272,7 @@
     color: var(--muted);
     margin-bottom: 7px;
   }
-
-  .form-group input, .form-group select {
+  .form-group input, .form-group select, .form-group textarea {
     width: 100%;
     background: rgba(255,255,255,.04);
     border: 1.5px solid var(--border);
@@ -357,12 +284,11 @@
     transition: border-color .2s;
     outline: none;
   }
-
-  .form-group input:focus, .form-group select:focus { border-color: var(--sky); }
-  .form-group input::placeholder { color: var(--muted); }
+  .form-group textarea { resize: vertical; min-height: 80px; }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--sky); }
+  .form-group input::placeholder, .form-group textarea::placeholder { color: var(--muted); }
 
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-
   .form-hint { font-size: 12px; color: var(--muted); margin-top: 5px; }
 
   .form-divider {
@@ -383,7 +309,6 @@
   .form-divider::before { left: 0; }
   .form-divider::after { right: 0; }
 
-  /* GOOGLE SIGN IN */
   .google-btn {
     width: 100%;
     background: #fff;
@@ -405,7 +330,6 @@
   .google-btn:hover { box-shadow: 0 4px 16px rgba(255,255,255,.15); }
   .google-icon { width: 20px; height: 20px; }
 
-  /* ADMIN PANEL */
   .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
 
   .stat-card {
@@ -428,7 +352,6 @@
 
   .stat-label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
 
-  /* TOAST */
   #toast {
     position: fixed;
     bottom: 24px;
@@ -449,7 +372,6 @@
   #toast.show { opacity: 1; transform: translateY(0); }
   #toast.error { border-color: var(--danger); color: var(--danger); }
 
-  /* MODAL */
   .modal-overlay {
     position: fixed;
     inset: 0;
@@ -470,7 +392,7 @@
     border: 1px solid var(--border);
     border-radius: 16px;
     padding: 32px;
-    width: min(480px, 100%);
+    width: min(520px, 100%);
     max-height: 90vh;
     overflow-y: auto;
     transform: translateY(20px);
@@ -495,7 +417,33 @@
     cursor: pointer;
   }
 
-  /* PAYMENT SECTION */
+  /* PAYMENT OPTIONS */
+  .payment-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .payment-option {
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all .2s;
+    text-align: center;
+    background: rgba(255,255,255,.02);
+  }
+  .payment-option:hover { border-color: var(--sky); }
+  .payment-option.selected { border-color: var(--fire); background: rgba(255,98,0,.1); }
+  .payment-option .pay-icon { font-size: 28px; margin-bottom: 6px; }
+  .payment-option .pay-label { font-weight: 700; font-size: 15px; color: var(--text); }
+  .payment-option .pay-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+  .payment-detail-box {
+    background: rgba(34,197,94,.07);
+    border: 1px solid rgba(34,197,94,.3);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .payment-detail-box.show { display: block; }
+
   .payment-box {
     background: rgba(255,107,0,.07);
     border: 1px solid rgba(255,107,0,.3);
@@ -503,21 +451,36 @@
     padding: 16px;
     margin-bottom: 20px;
   }
-
   .payment-box .price {
     font-family: 'Barlow Condensed', sans-serif;
     font-size: 36px;
     font-weight: 900;
     color: var(--gold);
   }
-
   .payment-box .price-label { color: var(--muted); font-size: 13px; }
 
-  /* EMPTY STATE */
+  /* GUESTS */
+  .guest-row {
+    background: rgba(255,255,255,.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    position: relative;
+  }
+  .guest-row .remove-guest {
+    position: absolute;
+    top: 8px; right: 8px;
+    background: none;
+    border: none;
+    color: var(--danger);
+    cursor: pointer;
+    font-size: 18px;
+  }
+
   .empty { text-align: center; padding: 48px 24px; color: var(--muted); }
   .empty-icon { font-size: 48px; margin-bottom: 12px; }
 
-  /* ADMIN ADD EVENT FORM */
   .add-event-panel {
     background: var(--card);
     border: 1px solid var(--border);
@@ -526,7 +489,6 @@
     margin-bottom: 24px;
   }
 
-  /* TABS */
   .tabs { display: flex; gap: 4px; margin-bottom: 24px; background: var(--card); border-radius: 10px; padding: 4px; }
   .tab {
     flex: 1;
@@ -545,13 +507,49 @@
   }
   .tab.active { background: linear-gradient(135deg, var(--fire), var(--gold)); color: #000; }
 
-  /* RESPONSIVE */
+  /* PROFILE */
+  .profile-avatar {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid var(--fire);
+  }
+
+  .profile-avatar-placeholder {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--court), var(--navy));
+    border: 3px solid var(--fire);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+  }
+
+  .avatar-upload-label {
+    display: inline-block;
+    margin-top: 8px;
+    cursor: pointer;
+    color: var(--sky);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: underline;
+  }
+
+  #avatarInput { display: none; }
+
+  /* ADMIN MEMBERS TAB */
+  .admin-tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+
   @media (max-width: 600px) {
     .form-row { grid-template-columns: 1fr; }
     .event-card { grid-template-columns: 1fr; }
     .event-actions { flex-direction: row; align-items: center; }
     .admin-grid { grid-template-columns: 1fr; }
     nav { height: auto; padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+    .payment-options { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -559,11 +557,15 @@
 
 <!-- NAV -->
 <nav>
-  <div class="nav-logo" style="display:flex;align-items:center;gap:8px"><svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="13" fill="url(#vb1)" stroke="#FF6200" stroke-width="1.5"/><path d="M14 1C14 1 8 7 8 14" stroke="#fff" stroke-width="1.8" stroke-linecap="round" fill="none"/><path d="M14 1C14 1 20 7 20 14" stroke="#fff" stroke-width="1.8" stroke-linecap="round" fill="none"/><path d="M1 14C7 14 14 8 14 1" stroke="#FFC107" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".6"/><path d="M27 14C21 14 14 8 14 1" stroke="#FFC107" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".6"/><path d="M1 14h26" stroke="#fff" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".4"/><path d="M2 19C8 17 20 17 26 19" stroke="#fff" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".5"/><path d="M2 9C8 11 20 11 26 9" stroke="#fff" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".5"/><defs><radialGradient id="vb1" cx="40%" cy="35%" r="70%"><stop offset="0%" stop-color="#7C3AED"/><stop offset="100%" stop-color="#2D1B6B"/></radialGradient></defs></svg> Oak Lawn Volleyball</div>
+  <div class="nav-logo" style="display:flex;align-items:center;gap:8px">
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="13" fill="url(#vb1)" stroke="#FF6200" stroke-width="1.5"/><path d="M14 1C14 1 8 7 8 14" stroke="#fff" stroke-width="1.8" stroke-linecap="round" fill="none"/><path d="M14 1C14 1 20 7 20 14" stroke="#fff" stroke-width="1.8" stroke-linecap="round" fill="none"/><path d="M1 14C7 14 14 8 14 1" stroke="#FFC107" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".6"/><path d="M27 14C21 14 14 8 14 1" stroke="#FFC107" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".6"/><path d="M1 14h26" stroke="#fff" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".4"/><path d="M2 19C8 17 20 17 26 19" stroke="#fff" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".5"/><path d="M2 9C8 11 20 11 26 9" stroke="#fff" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".5"/><defs><radialGradient id="vb1" cx="40%" cy="35%" r="70%"><stop offset="0%" stop-color="#7C3AED"/><stop offset="100%" stop-color="#2D1B6B"/></radialGradient></defs></svg>
+    Oak Lawn Volleyball
+  </div>
   <div class="nav-links">
     <button class="nav-btn active" onclick="showPage('home')">Home</button>
     <button class="nav-btn" onclick="showPage('schedule')">Schedule</button>
     <button class="nav-btn" id="rosterNavBtn" onclick="showPage('roster')" style="display:none">Roster</button>
+    <button class="nav-btn" id="profileNavBtn" onclick="showPage('profile')" style="display:none">Profile</button>
     <button class="nav-btn" id="adminNavBtn" onclick="showPage('admin')" style="display:none">Admin</button>
   </div>
   <div class="nav-user" id="navUser">
@@ -572,7 +574,6 @@
   </div>
 </nav>
 
-<!-- TOAST -->
 <div id="toast"></div>
 
 <!-- ======================== HOME PAGE ======================== -->
@@ -588,7 +589,6 @@
       <button class="btn btn-outline" onclick="openModal('signupModal')">Create Account</button>
     </div>
   </div>
-
   <div class="container">
     <div class="card" style="text-align:center; border-color: rgba(255,107,0,.3); background: rgba(255,107,0,.05)">
       <p style="font-size:17px; color:var(--text)">🏐 Next open gym coming up — <strong id="nextEventTeaser" style="color:var(--gold)">check the schedule</strong></p>
@@ -617,58 +617,120 @@
   </div>
 </div>
 
+<!-- ======================== PROFILE PAGE ======================== -->
+<div class="page" id="page-profile">
+  <div class="container">
+    <div class="section-title">My Profile</div>
+    <div class="section-sub">Customize your profile so the organizer can reach you.</div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:20px;margin-bottom:28px;flex-wrap:wrap">
+        <div>
+          <div id="profileAvatarDisplay" class="profile-avatar-placeholder">🏐</div>
+          <label class="avatar-upload-label" for="avatarInput">Change Photo</label>
+          <input type="file" id="avatarInput" accept="image/*" onchange="handleAvatarUpload(event)">
+        </div>
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:var(--text)" id="profileDisplayName">Your Name</div>
+          <div style="color:var(--muted);font-size:14px" id="profileDisplayEmail"></div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>First Name</label>
+          <input type="text" id="profileFirst" placeholder="Alex">
+        </div>
+        <div class="form-group">
+          <label>Last Name</label>
+          <input type="text" id="profileLast" placeholder="Johnson">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Phone Number</label>
+        <input type="tel" id="profilePhone" placeholder="(708) 555-0000">
+        <div class="form-hint">Only visible to the admin</div>
+      </div>
+      <div class="form-group">
+        <label>Skill Level</label>
+        <select id="profileSkill">
+          <option value="">Select your level...</option>
+          <option value="Beginner">Beginner</option>
+          <option value="Intermediate">Intermediate</option>
+          <option value="Advanced">Advanced</option>
+          <option value="Competitive">Competitive</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Bio / Notes</label>
+        <textarea id="profileBio" placeholder="Tell the group a little about yourself..."></textarea>
+      </div>
+
+      <button class="btn btn-primary" onclick="saveProfile()">Save Profile</button>
+    </div>
+  </div>
+</div>
+
 <!-- ======================== ADMIN PAGE ======================== -->
 <div class="page" id="page-admin">
   <div class="container">
     <div class="section-title">Admin Panel</div>
     <div class="section-sub">Manage open gym sessions and view registrations.</div>
 
-    <!-- Stats -->
     <div class="admin-grid" id="adminStats"></div>
 
-    <!-- Add Event -->
-    <div class="add-event-panel">
-      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:var(--gold);text-transform:uppercase;margin-bottom:16px;">➕ Add Open Gym</div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Event Name</label>
-          <input type="text" id="adm-name" placeholder="Monday Open Gym">
-        </div>
-        <div class="form-group">
-          <label>Date</label>
-          <input type="date" id="adm-date">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Time</label>
-          <input type="text" id="adm-time" placeholder="7:00 PM – 9:00 PM">
-        </div>
-        <div class="form-group">
-          <label>Location</label>
-          <input type="text" id="adm-location" placeholder="Oak Lawn Rec Center">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Max Spots</label>
-          <input type="number" id="adm-spots" placeholder="20" min="1">
-        </div>
-        <div class="form-group">
-          <label>Cost per Person ($)</label>
-          <input type="number" id="adm-cost" placeholder="10" min="0" step="0.01">
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Payment Link (Venmo, Zelle, etc.)</label>
-        <input type="text" id="adm-payment" placeholder="https://venmo.com/yourusername">
-      </div>
-      <button class="btn btn-primary" onclick="addEvent()">Add Open Gym</button>
+    <!-- Admin Sub-Tabs -->
+    <div class="tabs admin-tabs">
+      <button class="tab active" id="admTab1" onclick="switchAdminTab('events')">Events</button>
+      <button class="tab" id="admTab2" onclick="switchAdminTab('members')">Members</button>
     </div>
 
-    <!-- Event list in admin -->
-    <div class="section-title" style="font-size:22px;margin-bottom:12px;">Current Events</div>
-    <div id="adminEventsList"></div>
+    <!-- EVENTS TAB -->
+    <div id="adminTabEvents">
+      <div class="add-event-panel">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:var(--gold);text-transform:uppercase;margin-bottom:16px;">➕ Add Open Gym</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Event Name</label>
+            <input type="text" id="adm-name" placeholder="Monday Open Gym">
+          </div>
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="adm-date">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Time</label>
+            <input type="text" id="adm-time" placeholder="7:00 PM – 9:00 PM">
+          </div>
+          <div class="form-group">
+            <label>Location</label>
+            <input type="text" id="adm-location" placeholder="Oak Lawn Rec Center">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Max Spots</label>
+            <input type="number" id="adm-spots" placeholder="20" min="1">
+          </div>
+          <div class="form-group">
+            <label>Cost per Person ($)</label>
+            <input type="number" id="adm-cost" placeholder="10" min="0" step="0.01">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="addEvent()">Add Open Gym</button>
+      </div>
+
+      <div class="section-title" style="font-size:22px;margin-bottom:12px;">Current Events</div>
+      <div id="adminEventsList"></div>
+    </div>
+
+    <!-- MEMBERS TAB -->
+    <div id="adminTabMembers" style="display:none">
+      <div class="section-title" style="font-size:22px;margin-bottom:12px;">All Members</div>
+      <div id="adminMembersList"></div>
+    </div>
   </div>
 </div>
 
@@ -681,26 +743,16 @@
       <button class="tab active" id="loginTab" onclick="switchAuthTab('login')">Log In</button>
       <button class="tab" id="registerTab" onclick="switchAuthTab('register')">Sign Up</button>
     </div>
-
-    <!-- LOGIN FORM -->
     <div id="loginForm">
       <button class="google-btn" onclick="googleSignIn()">
         <svg class="google-icon" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
         Continue with Google
       </button>
       <div class="form-divider">or</div>
-      <div class="form-group">
-        <label>Email</label>
-        <input type="email" id="loginEmail" placeholder="you@email.com">
-      </div>
-      <div class="form-group">
-        <label>Password</label>
-        <input type="password" id="loginPassword" placeholder="••••••••">
-      </div>
+      <div class="form-group"><label>Email</label><input type="email" id="loginEmail" placeholder="you@email.com"></div>
+      <div class="form-group"><label>Password</label><input type="password" id="loginPassword" placeholder="••••••••"></div>
       <button class="btn btn-primary btn-full" onclick="login()" style="margin-top:4px">Log In</button>
     </div>
-
-    <!-- REGISTER FORM -->
     <div id="registerForm" style="display:none">
       <button class="google-btn" onclick="googleSignIn()">
         <svg class="google-icon" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
@@ -708,24 +760,11 @@
       </button>
       <div class="form-divider">or</div>
       <div class="form-row">
-        <div class="form-group">
-          <label>First Name</label>
-          <input type="text" id="regFirst" placeholder="Alex">
-        </div>
-        <div class="form-group">
-          <label>Last Name</label>
-          <input type="text" id="regLast" placeholder="Johnson">
-        </div>
+        <div class="form-group"><label>First Name</label><input type="text" id="regFirst" placeholder="Alex"></div>
+        <div class="form-group"><label>Last Name</label><input type="text" id="regLast" placeholder="Johnson"></div>
       </div>
-      <div class="form-group">
-        <label>Email Address</label>
-        <input type="email" id="regEmail" placeholder="you@email.com">
-        <div class="form-hint">Any valid email address</div>
-      </div>
-      <div class="form-group">
-        <label>Password</label>
-        <input type="password" id="regPassword" placeholder="At least 8 characters">
-      </div>
+      <div class="form-group"><label>Email Address</label><input type="email" id="regEmail" placeholder="you@email.com"></div>
+      <div class="form-group"><label>Password</label><input type="password" id="regPassword" placeholder="At least 8 characters"></div>
       <button class="btn btn-primary btn-full" onclick="register()" style="margin-top:4px">Create Account</button>
     </div>
   </div>
@@ -750,15 +789,8 @@
         <div class="form-group"><label>First Name</label><input type="text" id="reg2First" placeholder="Alex"></div>
         <div class="form-group"><label>Last Name</label><input type="text" id="reg2Last" placeholder="Johnson"></div>
       </div>
-      <div class="form-group">
-        <label>Email Address</label>
-        <input type="email" id="reg2Email" placeholder="you@email.com">
-        <div class="form-hint">Any valid email address</div>
-      </div>
-      <div class="form-group">
-        <label>Password</label>
-        <input type="password" id="reg2Password" placeholder="At least 8 characters">
-      </div>
+      <div class="form-group"><label>Email Address</label><input type="email" id="reg2Email" placeholder="you@email.com"></div>
+      <div class="form-group"><label>Password</label><input type="password" id="reg2Password" placeholder="At least 8 characters"></div>
       <button class="btn btn-primary btn-full" onclick="register2()" style="margin-top:4px">Create Account</button>
     </div>
     <div id="login2" style="display:none">
@@ -779,20 +811,63 @@
   <div class="modal" style="position:relative">
     <button class="modal-close" onclick="closeModal('eventSignupModal')">✕</button>
     <h2 id="esm-title">Sign Up</h2>
-    <div class="payment-box">
+
+    <!-- Price summary -->
+    <div class="payment-box" id="esm-pricebox">
       <div class="price-label">Cost per person</div>
-      <div class="price" id="esm-price">$10</div>
+      <div class="price" id="esm-price">$10.00</div>
+      <div style="color:var(--muted);font-size:13px;margin-top:4px" id="esm-total-line"></div>
     </div>
-    <p style="color:var(--muted);font-size:14px;margin-bottom:16px;">Complete your payment first, then confirm your spot below.</p>
-    <a id="esm-payLink" href="#" target="_blank" class="btn btn-success btn-full" style="display:block;text-align:center;text-decoration:none;margin-bottom:16px;">💸 Pay Now</a>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">After paying, click below to save your spot on the roster.</p>
-    <button class="btn btn-primary btn-full" onclick="confirmSignup()">✅ I've Paid — Save My Spot</button>
-    <p style="font-size:12px;color:var(--muted);margin-top:12px;text-align:center;">Payment is handled externally. Contact the organizer with issues.</p>
+
+    <!-- GUESTS -->
+    <div style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-weight:700;font-size:15px">Bringing guests?</div>
+        <button class="btn btn-outline btn-sm" onclick="addGuestRow()">+ Add Guest</button>
+      </div>
+      <div id="guestRows"></div>
+    </div>
+
+    <!-- PAYMENT METHOD -->
+    <div style="font-weight:700;font-size:15px;margin-bottom:12px">How will you pay?</div>
+    <div class="payment-options">
+      <div class="payment-option" id="payOptCash" onclick="selectPayment('cash')">
+        <div class="pay-icon">💵</div>
+        <div class="pay-label">Cash</div>
+        <div class="pay-sub">Pay in person</div>
+      </div>
+      <div class="payment-option" id="payOptVenmo" onclick="selectPayment('venmo')">
+        <div class="pay-icon">📱</div>
+        <div class="pay-label">Venmo / Zelle</div>
+        <div class="pay-sub">Send digitally</div>
+      </div>
+    </div>
+
+    <!-- Cash instructions -->
+    <div class="payment-detail-box" id="cashInstructions">
+      <div style="font-weight:700;color:var(--success);margin-bottom:6px">💵 Pay in Cash</div>
+      <p style="font-size:14px;color:var(--muted)">Bring exact change and pay the organizer at the door before the session starts. Click confirm below to save your spot.</p>
+    </div>
+
+    <!-- Venmo/Zelle instructions -->
+    <div class="payment-detail-box" id="venmoInstructions">
+      <div style="font-weight:700;color:var(--success);margin-bottom:8px">📱 Venmo or Zelle</div>
+      <div style="font-size:14px;color:var(--muted);margin-bottom:12px">Send payment to the organizer's number:</div>
+      <div style="background:rgba(255,255,255,.06);border-radius:8px;padding:12px;text-align:center">
+        <div style="font-size:22px;font-weight:900;color:var(--gold);letter-spacing:2px">📞 (708) 953-6658</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">JP Sanchez — Oak Lawn Volleyball</div>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin-top:10px">Include your name in the memo. Once sent, click confirm below.</p>
+    </div>
+
+    <div style="margin-top:16px" id="confirmSection" style="display:none">
+      <button class="btn btn-primary btn-full" onclick="confirmSignup()">✅ Confirm My Spot</button>
+      <p style="font-size:12px;color:var(--muted);margin-top:10px;text-align:center">Contact JP at (708) 953-6658 with any payment issues.</p>
+    </div>
   </div>
 </div>
 
 <script type="module">
-// ======================== FIREBASE SETUP ========================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
@@ -802,6 +877,9 @@ import {
   getFirestore, collection, doc, addDoc, setDoc, getDoc, deleteDoc,
   query, where, getDocs, onSnapshot, orderBy, serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getStorage, ref as storageRef, uploadString, getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCmBomAlEnZS4xeQ7uUadvGUK6xyj7adqk",
@@ -815,16 +893,20 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
+const storage = getStorage(fbApp);
 const googleProvider = new GoogleAuthProvider();
 
-const ADMIN_EMAIL = 'judeperryusanchez@gmail.com'; // <-- Change this to the email that should have admin access
+const ADMIN_EMAIL = 'judeperryusanchez@gmail.com';
+const ORGANIZER_PHONE = '(708) 953-6658';
 
-// ======================== STATE (in-memory cache; data lives in Firestore) ========================
 let currentUser = null;
 let eventsCache = [];
-let regsCache = {}; // eventId -> array of registrations
+let regsCache = {};
 let selectedEventId = null;
+let selectedPayment = null;
+let guestCount = 0;
 
+// ======================== TOAST ========================
 function showToast(msg, isError = false) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -855,16 +937,13 @@ async function doLogin(email, pass) {
   if (!email || !pass) return showToast('Fill in all fields.', true);
   try {
     await signInWithEmailAndPassword(auth, email, pass);
-    closeModal('loginModal');
-    closeModal('signupModal');
-  } catch (err) {
-    showToast(friendlyAuthError(err), true);
-  }
+    closeModal('loginModal'); closeModal('signupModal');
+  } catch (err) { showToast(friendlyAuthError(err), true); }
 }
 function login() { doLogin(document.getElementById('loginEmail').value.trim(), document.getElementById('loginPassword').value); }
 function login2() { doLogin(document.getElementById('login2Email').value.trim(), document.getElementById('login2Password').value); }
 
-function isValidEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
+function isValidEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
 
 async function doRegister(first, last, email, pass, modalId) {
   if (!first || !last || !email || !pass) return showToast('All fields are required.', true);
@@ -872,41 +951,26 @@ async function doRegister(first, last, email, pass, modalId) {
   if (pass.length < 8) return showToast('Password must be at least 8 characters.', true);
   try {
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
-    await setDoc(doc(db, 'users', cred.user.uid), { firstName: first, lastName: last, email });
+    await setDoc(doc(db, 'users', cred.user.uid), { firstName: first, lastName: last, email, phone: '', skill: '', bio: '', avatarUrl: '' });
     closeModal(modalId);
     showToast(`Welcome, ${first}! 🎉`);
-  } catch (err) {
-    showToast(friendlyAuthError(err), true);
-  }
+  } catch (err) { showToast(friendlyAuthError(err), true); }
 }
-function register() {
-  doRegister(document.getElementById('regFirst').value.trim(), document.getElementById('regLast').value.trim(),
-    document.getElementById('regEmail').value.trim(), document.getElementById('regPassword').value, 'loginModal');
-}
-function register2() {
-  doRegister(document.getElementById('reg2First').value.trim(), document.getElementById('reg2Last').value.trim(),
-    document.getElementById('reg2Email').value.trim(), document.getElementById('reg2Password').value, 'signupModal');
-}
+function register() { doRegister(document.getElementById('regFirst').value.trim(), document.getElementById('regLast').value.trim(), document.getElementById('regEmail').value.trim(), document.getElementById('regPassword').value, 'loginModal'); }
+function register2() { doRegister(document.getElementById('reg2First').value.trim(), document.getElementById('reg2Last').value.trim(), document.getElementById('reg2Email').value.trim(), document.getElementById('reg2Password').value, 'signupModal'); }
 
 async function googleSignIn() {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
     const [given, ...rest] = (user.displayName || 'Player').split(' ');
-    await ensureUserDoc(user.uid, { firstName: given, lastName: rest.join(' '), email: user.email });
-    closeModal('loginModal');
-    closeModal('signupModal');
+    await ensureUserDoc(user.uid, { firstName: given, lastName: rest.join(' '), email: user.email, phone: '', skill: '', bio: '', avatarUrl: user.photoURL || '' });
+    closeModal('loginModal'); closeModal('signupModal');
     showToast(`Welcome, ${given}! 🎉`);
-  } catch (err) {
-    showToast(friendlyAuthError(err), true);
-  }
+  } catch (err) { showToast(friendlyAuthError(err), true); }
 }
 
-function logout() {
-  signOut(auth);
-  showPage('home');
-  showToast('Logged out.');
-}
+function logout() { signOut(auth); showPage('home'); showToast('Logged out.'); }
 
 onAuthStateChanged(auth, async (user) => {
   if (user) {
@@ -915,15 +979,11 @@ onAuthStateChanged(auth, async (user) => {
       profile = await ensureUserDoc(user.uid, {
         firstName: user.displayName ? user.displayName.split(' ')[0] : 'Player',
         lastName: user.displayName ? user.displayName.split(' ').slice(1).join(' ') : '',
-        email: user.email
+        email: user.email, phone: '', skill: '', bio: '', avatarUrl: user.photoURL || ''
       });
-    } catch { profile = { firstName: 'Player', lastName: '', email: user.email }; }
+    } catch { profile = { firstName: 'Player', lastName: '', email: user.email, phone: '', skill: '', bio: '', avatarUrl: '' }; }
 
-    currentUser = {
-      uid: user.uid, email: user.email,
-      firstName: profile.firstName, lastName: profile.lastName,
-      isAdmin: user.email === ADMIN_EMAIL
-    };
+    currentUser = { uid: user.uid, email: user.email, firstName: profile.firstName, lastName: profile.lastName, phone: profile.phone || '', skill: profile.skill || '', bio: profile.bio || '', avatarUrl: profile.avatarUrl || '', isAdmin: user.email === ADMIN_EMAIL };
     afterLogin();
   } else {
     currentUser = null;
@@ -932,25 +992,31 @@ onAuthStateChanged(auth, async (user) => {
       <button class="btn btn-primary btn-sm" onclick="openModal('signupModal')">Sign Up</button>`;
     document.getElementById('adminNavBtn').style.display = 'none';
     document.getElementById('rosterNavBtn').style.display = 'none';
+    document.getElementById('profileNavBtn').style.display = 'none';
     renderSchedule();
   }
 });
 
 function afterLogin() {
   const name = currentUser.isAdmin ? 'Admin' : currentUser.firstName;
+  const avatarHtml = currentUser.avatarUrl
+    ? `<img src="${currentUser.avatarUrl}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid var(--fire)">`
+    : `<div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--court),var(--navy));display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid var(--fire)">🏐</div>`;
   document.getElementById('navUser').innerHTML = `
+    ${avatarHtml}
     <span style="color:var(--muted);font-size:14px">👋 ${name}</span>
     ${currentUser.isAdmin ? '<span class="badge">ADMIN</span>' : ''}
     <button class="btn btn-outline btn-sm" onclick="logout()">Log Out</button>`;
 
   document.getElementById('rosterNavBtn').style.display = '';
+  document.getElementById('profileNavBtn').style.display = '';
   document.getElementById('adminNavBtn').style.display = currentUser.isAdmin ? '' : 'none';
   if (currentUser.isAdmin) renderAdminEvents();
   renderSchedule();
   populateRosterSelect();
 }
 
-// ======================== EVENTS & REGISTRATIONS (LIVE FIRESTORE) ========================
+// ======================== EVENTS LIVE ========================
 onSnapshot(query(collection(db, 'events'), orderBy('date')), (snap) => {
   eventsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   renderSchedule();
@@ -977,11 +1043,9 @@ async function addEvent() {
   const location = document.getElementById('adm-location').value.trim();
   const spots = parseInt(document.getElementById('adm-spots').value);
   const cost = parseFloat(document.getElementById('adm-cost').value) || 0;
-  const payment = document.getElementById('adm-payment').value.trim();
   if (!name || !date || !time || !location || !spots) return showToast('Fill in all event fields.', true);
-
-  await addDoc(collection(db, 'events'), { name, date, time, location, spots, cost, payment: payment || '#', createdAt: serverTimestamp() });
-  ['adm-name','adm-date','adm-time','adm-location','adm-spots','adm-cost','adm-payment'].forEach(id => document.getElementById(id).value = '');
+  await addDoc(collection(db, 'events'), { name, date, time, location, spots, cost, createdAt: serverTimestamp() });
+  ['adm-name','adm-date','adm-time','adm-location','adm-spots','adm-cost'].forEach(id => document.getElementById(id).value = '');
   showToast('Event added!');
 }
 
@@ -1027,14 +1091,15 @@ function renderSchedule() {
       const month = d.toLocaleString('default', { month: 'short' }).toUpperCase();
       const day = d.getDate();
       const evRegs = regsCache[ev.id] || [];
-      const taken = evRegs.length;
+      const taken = evRegs.reduce((sum, r) => sum + 1 + (r.guests?.length || 0), 0);
       const pct = Math.round((taken / ev.spots) * 100);
       const full = taken >= ev.spots;
       const mySignup = currentUser && evRegs.find(r => r.uid === currentUser.uid);
 
       let actionBtn = '';
       if (mySignup) {
-        actionBtn = `<span style="color:var(--success);font-weight:700;font-size:14px">✅ Signed Up</span>
+        const guestLabel = mySignup.guests?.length ? ` +${mySignup.guests.length} guest${mySignup.guests.length > 1 ? 's' : ''}` : '';
+        actionBtn = `<span style="color:var(--success);font-weight:700;font-size:14px">✅ Signed Up${guestLabel}</span>
                      <button class="btn btn-outline btn-sm" onclick="cancelSignup('${ev.id}')">Cancel</button>`;
       } else if (full) {
         actionBtn = `<span style="color:var(--danger);font-size:14px;font-weight:600">FULL</span>`;
@@ -1045,10 +1110,7 @@ function renderSchedule() {
       return `
       <div class="event-card">
         <div style="display:flex;gap:16px;align-items:flex-start">
-          <div class="event-date">
-            <div class="event-month">${month}</div>
-            <div class="event-day">${day}</div>
-          </div>
+          <div class="event-date"><div class="event-month">${month}</div><div class="event-day">${day}</div></div>
           <div class="event-info">
             <h3>${ev.name}</h3>
             <div class="event-meta">
@@ -1056,7 +1118,7 @@ function renderSchedule() {
               <span>📍 ${ev.location}</span>
               <span>👥 ${taken}/${ev.spots} spots</span>
             </div>
-            <div class="spots-bar"><div class="spots-fill" style="width:${pct}%"></div></div>
+            <div class="spots-bar"><div class="spots-fill" style="width:${Math.min(pct,100)}%"></div></div>
           </div>
         </div>
         <div class="event-actions">${actionBtn}</div>
@@ -1079,26 +1141,103 @@ function openEventSignup(eventId) {
   const ev = eventsCache.find(e => e.id === eventId);
   if (!ev) return;
   selectedEventId = eventId;
+  selectedPayment = null;
+  guestCount = 0;
+
   document.getElementById('esm-title').textContent = ev.name;
   document.getElementById('esm-price').textContent = `$${Number(ev.cost).toFixed(2)}`;
-  document.getElementById('esm-payLink').href = ev.payment;
+  document.getElementById('esm-total-line').textContent = '';
+  document.getElementById('guestRows').innerHTML = '';
+  document.getElementById('cashInstructions').classList.remove('show');
+  document.getElementById('venmoInstructions').classList.remove('show');
+  document.getElementById('confirmSection').style.display = 'none';
+  document.getElementById('payOptCash').classList.remove('selected');
+  document.getElementById('payOptVenmo').classList.remove('selected');
+
   openModal('eventSignupModal');
+}
+
+function addGuestRow() {
+  const ev = eventsCache.find(e => e.id === selectedEventId);
+  const taken = (regsCache[selectedEventId] || []).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+  const available = ev ? ev.spots - taken : 0;
+  if (guestCount >= available - 1) return showToast('Not enough spots for more guests.', true);
+
+  guestCount++;
+  const idx = guestCount;
+  const row = document.createElement('div');
+  row.className = 'guest-row';
+  row.id = `guestRow${idx}`;
+  row.innerHTML = `
+    <button class="remove-guest" onclick="removeGuestRow(${idx})">✕</button>
+    <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase">Guest ${idx}</div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Guest Name</label>
+      <input type="text" id="guestName${idx}" placeholder="Full name">
+    </div>`;
+  document.getElementById('guestRows').appendChild(row);
+  updatePriceTotal();
+}
+
+function removeGuestRow(idx) {
+  const row = document.getElementById(`guestRow${idx}`);
+  if (row) row.remove();
+  updatePriceTotal();
+}
+
+function updatePriceTotal() {
+  const ev = eventsCache.find(e => e.id === selectedEventId);
+  if (!ev) return;
+  const guestRows = document.querySelectorAll('.guest-row');
+  const total = (1 + guestRows.length) * ev.cost;
+  const line = document.getElementById('esm-total-line');
+  line.textContent = guestRows.length > 0 ? `Total: $${total.toFixed(2)} for you + ${guestRows.length} guest${guestRows.length > 1 ? 's' : ''}` : '';
+}
+
+function selectPayment(type) {
+  selectedPayment = type;
+  document.getElementById('payOptCash').classList.toggle('selected', type === 'cash');
+  document.getElementById('payOptVenmo').classList.toggle('selected', type === 'venmo');
+  document.getElementById('cashInstructions').classList.toggle('show', type === 'cash');
+  document.getElementById('venmoInstructions').classList.toggle('show', type === 'venmo');
+  document.getElementById('confirmSection').style.display = '';
 }
 
 async function confirmSignup() {
   if (!currentUser || !selectedEventId) return;
+  if (!selectedPayment) return showToast('Please choose a payment method.', true);
   const ev = eventsCache.find(e => e.id === selectedEventId);
   if (!ev) return;
+
   const existing = regsCache[selectedEventId] || [];
   if (existing.find(r => r.uid === currentUser.uid)) { showToast("You're already signed up!", true); closeModal('eventSignupModal'); return; }
-  if (existing.length >= ev.spots) { showToast('Sorry, this event is now full.', true); return; }
+
+  // Collect guests
+  const guestRows = document.querySelectorAll('.guest-row');
+  const guests = [];
+  for (const row of guestRows) {
+    const idx = row.id.replace('guestRow', '');
+    const name = document.getElementById(`guestName${idx}`)?.value.trim();
+    if (!name) return showToast('Please enter a name for all guests.', true);
+    guests.push({ name });
+  }
+
+  const taken = existing.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+  if (taken + 1 + guests.length > ev.spots) { showToast('Sorry, not enough spots available.', true); return; }
 
   await addDoc(collection(db, 'registrations'), {
-    eventId: selectedEventId, uid: currentUser.uid, email: currentUser.email,
-    name: `${currentUser.firstName} ${currentUser.lastName}`, signedUpAt: serverTimestamp()
+    eventId: selectedEventId,
+    uid: currentUser.uid,
+    email: currentUser.email,
+    name: `${currentUser.firstName} ${currentUser.lastName}`,
+    phone: currentUser.phone || '',
+    paymentMethod: selectedPayment,
+    guests,
+    signedUpAt: serverTimestamp()
   });
+
   closeModal('eventSignupModal');
-  showToast("You're on the roster! See you there 🏐");
+  showToast(`You're on the roster! See you there 🏐`);
 }
 
 async function cancelSignup(eventId) {
@@ -1131,33 +1270,60 @@ function renderRoster() {
 
   const evRegs = (regsCache[eventId] || []).slice().sort((a,b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
   const ev = eventsCache.find(e => e.id === eventId);
+  const totalSpots = evRegs.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
 
   if (!evRegs.length) {
     el.innerHTML = `<div class="empty"><div class="empty-icon">🏐</div><p>Nobody signed up yet for this session.</p></div>`;
     return;
   }
 
+  const isAdmin = currentUser?.isAdmin;
+
+  let rows = '';
+  let num = 1;
+  for (const r of evRegs) {
+    const payBadge = r.paymentMethod === 'cash'
+      ? '<span style="background:rgba(34,197,94,.15);color:var(--success);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">💵 Cash</span>'
+      : r.paymentMethod === 'venmo'
+      ? '<span style="background:rgba(91,111,212,.15);color:var(--sky);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">📱 Venmo/Zelle</span>'
+      : '';
+
+    rows += `<tr>
+      <td style="color:var(--muted)">${num++}</td>
+      <td><strong>${r.name}</strong></td>
+      <td style="color:var(--muted)">${isAdmin ? r.email : '—'}</td>
+      ${isAdmin ? `<td style="color:var(--muted)">${r.phone || '—'}</td>` : ''}
+      <td>${payBadge}</td>
+      <td style="color:var(--muted);font-size:13px">${r.signedUpAt?.toDate ? r.signedUpAt.toDate().toLocaleDateString() : ''}</td>
+      ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemove('${r.id}')">Remove</button></td>` : ''}
+    </tr>`;
+
+    for (const g of (r.guests || [])) {
+      rows += `<tr style="background:rgba(255,255,255,.01)">
+        <td style="color:var(--muted)">${num++}</td>
+        <td style="color:var(--muted);padding-left:28px">↳ ${g.name} <span style="font-size:11px;opacity:.6">(guest)</span></td>
+        <td></td>
+        ${isAdmin ? '<td></td>' : ''}
+        <td></td>
+        <td></td>
+        ${isAdmin ? '<td></td>' : ''}
+      </tr>`;
+    }
+  }
+
   el.innerHTML = `
     <div class="card" style="padding:0;overflow:hidden">
       <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-        <span style="font-weight:600">${evRegs.length} / ${ev ? ev.spots : '?'} spots filled</span>
-        <span style="color:var(--muted);font-size:13px">Past events are cleaned up automatically</span>
+        <span style="font-weight:600">${totalSpots} / ${ev ? ev.spots : '?'} spots filled</span>
       </div>
       <table class="roster-table">
         <thead><tr>
-          <th>#</th><th>Name</th><th>Email</th><th>Signed Up</th>
-          ${currentUser?.isAdmin ? '<th>Action</th>' : ''}
+          <th>#</th><th>Name</th><th>Email</th>
+          ${isAdmin ? '<th>Phone</th>' : ''}
+          <th>Payment</th><th>Signed Up</th>
+          ${isAdmin ? '<th>Action</th>' : ''}
         </tr></thead>
-        <tbody>
-          ${evRegs.map((r, i) => `
-            <tr>
-              <td style="color:var(--muted)">${i + 1}</td>
-              <td><strong>${r.name}</strong></td>
-              <td style="color:var(--muted)">${r.email}</td>
-              <td style="color:var(--muted);font-size:13px">${r.signedUpAt?.toDate ? r.signedUpAt.toDate().toLocaleDateString() : ''}</td>
-              ${currentUser?.isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemove('${r.id}')">Remove</button></td>` : ''}
-            </tr>`).join('')}
-        </tbody>
+        <tbody>${rows}</tbody>
       </table>
     </div>`;
 }
@@ -1168,10 +1334,122 @@ async function adminRemove(regId) {
   showToast('Removed.');
 }
 
+// ======================== PROFILE ========================
+async function loadProfile() {
+  if (!currentUser) return;
+  const snap = await getDoc(doc(db, 'users', currentUser.uid));
+  const p = snap.data() || {};
+  document.getElementById('profileFirst').value = p.firstName || '';
+  document.getElementById('profileLast').value = p.lastName || '';
+  document.getElementById('profilePhone').value = p.phone || '';
+  document.getElementById('profileSkill').value = p.skill || '';
+  document.getElementById('profileBio').value = p.bio || '';
+  document.getElementById('profileDisplayName').textContent = `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Your Name';
+  document.getElementById('profileDisplayEmail').textContent = currentUser.email;
+
+  const avatarEl = document.getElementById('profileAvatarDisplay');
+  if (p.avatarUrl) {
+    avatarEl.outerHTML = `<img id="profileAvatarDisplay" class="profile-avatar" src="${p.avatarUrl}">`;
+  }
+}
+
+async function saveProfile() {
+  if (!currentUser) return;
+  const first = document.getElementById('profileFirst').value.trim();
+  const last = document.getElementById('profileLast').value.trim();
+  const phone = document.getElementById('profilePhone').value.trim();
+  const skill = document.getElementById('profileSkill').value;
+  const bio = document.getElementById('profileBio').value.trim();
+  if (!first || !last) return showToast('First and last name are required.', true);
+
+  await setDoc(doc(db, 'users', currentUser.uid), { firstName: first, lastName: last, email: currentUser.email, phone, skill, bio }, { merge: true });
+  currentUser.firstName = first; currentUser.lastName = last; currentUser.phone = phone;
+  document.getElementById('profileDisplayName').textContent = `${first} ${last}`;
+  showToast('Profile saved! ✅');
+  afterLogin();
+}
+
+async function handleAvatarUpload(event) {
+  const file = event.target.files[0];
+  if (!file || !currentUser) return;
+  if (file.size > 2 * 1024 * 1024) return showToast('Image must be under 2MB.', true);
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const dataUrl = e.target.result;
+    try {
+      const sRef = storageRef(storage, `avatars/${currentUser.uid}`);
+      await uploadString(sRef, dataUrl, 'data_url');
+      const url = await getDownloadURL(sRef);
+      await setDoc(doc(db, 'users', currentUser.uid), { avatarUrl: url }, { merge: true });
+      currentUser.avatarUrl = url;
+
+      const avatarEl = document.getElementById('profileAvatarDisplay');
+      if (avatarEl.tagName === 'IMG') {
+        avatarEl.src = url;
+      } else {
+        avatarEl.outerHTML = `<img id="profileAvatarDisplay" class="profile-avatar" src="${url}">`;
+      }
+      showToast('Profile photo updated! 📸');
+      afterLogin();
+    } catch (err) {
+      // If storage isn't enabled, just store the dataUrl directly in Firestore (base64, small images only)
+      try {
+        await setDoc(doc(db, 'users', currentUser.uid), { avatarUrl: dataUrl }, { merge: true });
+        currentUser.avatarUrl = dataUrl;
+        const avatarEl = document.getElementById('profileAvatarDisplay');
+        if (avatarEl.tagName === 'IMG') { avatarEl.src = dataUrl; }
+        else { avatarEl.outerHTML = `<img id="profileAvatarDisplay" class="profile-avatar" src="${dataUrl}">`; }
+        showToast('Profile photo updated! 📸');
+        afterLogin();
+      } catch { showToast('Could not upload photo. Try a smaller image.', true); }
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
 // ======================== ADMIN ========================
+function switchAdminTab(tab) {
+  document.getElementById('adminTabEvents').style.display = tab === 'events' ? '' : 'none';
+  document.getElementById('adminTabMembers').style.display = tab === 'members' ? '' : 'none';
+  document.getElementById('admTab1').classList.toggle('active', tab === 'events');
+  document.getElementById('admTab2').classList.toggle('active', tab === 'members');
+  if (tab === 'members') loadAdminMembers();
+}
+
+async function loadAdminMembers() {
+  const el = document.getElementById('adminMembersList');
+  el.innerHTML = '<div style="color:var(--muted);padding:12px">Loading...</div>';
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    const members = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (!members.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">👥</div><p>No members yet.</p></div>'; return; }
+
+    el.innerHTML = `
+      <div class="card" style="padding:0;overflow:hidden">
+        <table class="roster-table">
+          <thead><tr>
+            <th>Photo</th><th>Name</th><th>Email</th><th>Phone</th><th>Skill</th><th>Bio</th>
+          </tr></thead>
+          <tbody>
+            ${members.map(m => `
+              <tr>
+                <td>${m.avatarUrl ? `<img src="${m.avatarUrl}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">` : '<span style="font-size:24px">🏐</span>'}</td>
+                <td><strong>${m.firstName || ''} ${m.lastName || ''}</strong></td>
+                <td style="color:var(--muted)">${m.email || '—'}</td>
+                <td style="color:var(--gold)">${m.phone || '—'}</td>
+                <td><span style="background:rgba(91,111,212,.15);color:var(--sky);border-radius:4px;padding:2px 8px;font-size:12px">${m.skill || '—'}</span></td>
+                <td style="color:var(--muted);font-size:13px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.bio || '—'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Could not load members.</p></div>'; }
+}
+
 async function renderAdminStats() {
   let totalSignups = 0;
-  eventsCache.forEach(e => { totalSignups += (regsCache[e.id] || []).length; });
+  eventsCache.forEach(e => { totalSignups += (regsCache[e.id] || []).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0); });
   let memberCount = '—';
   try { memberCount = (await getDocs(collection(db, 'users'))).size; } catch {}
 
@@ -1181,7 +1459,7 @@ async function renderAdminStats() {
     <div class="stat-card"><div class="stat-num">${eventsCache.length}</div><div class="stat-label">Events</div></div>
     <div class="stat-card"><div class="stat-num">${totalSignups}</div><div class="stat-label">Signups</div></div>
     <div class="stat-card"><div class="stat-num">${memberCount}</div><div class="stat-label">Members</div></div>
-    <div class="stat-card"><div class="stat-num">${eventsCache.filter(e=>(regsCache[e.id]||[]).length >= e.spots).length}</div><div class="stat-label">Full Events</div></div>`;
+    <div class="stat-card"><div class="stat-num">${eventsCache.filter(e => (regsCache[e.id]||[]).reduce((s,r)=>s+1+(r.guests?.length||0),0) >= e.spots).length}</div><div class="stat-label">Full Events</div></div>`;
 }
 
 function renderAdminEvents() {
@@ -1193,16 +1471,13 @@ function renderAdminEvents() {
     el.innerHTML = eventsCache.map(ev => {
       const d = new Date(ev.date + 'T12:00:00');
       const evRegs = regsCache[ev.id] || [];
+      const taken = evRegs.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
       return `
       <div class="card" style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center">
         <div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700">${ev.name}</div>
-          <div style="color:var(--muted);font-size:14px;margin-top:4px">
-            ${d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · ${ev.time} · ${ev.location}
-          </div>
-          <div style="color:var(--gold);font-size:14px;margin-top:4px">
-            👥 ${evRegs.length}/${ev.spots} signed up · $${ev.cost} each
-          </div>
+          <div style="color:var(--muted);font-size:14px;margin-top:4px">${d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · ${ev.time} · ${ev.location}</div>
+          <div style="color:var(--gold);font-size:14px;margin-top:4px">👥 ${taken}/${ev.spots} signed up · $${ev.cost} each</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <button class="btn btn-outline btn-sm" onclick="showPage('roster');populateRosterSelect();document.getElementById('rosterSelect').value='${ev.id}';renderRoster()">View Roster</button>
@@ -1220,10 +1495,10 @@ function showPage(name) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => { if (b.textContent.toLowerCase().includes(name)) b.classList.add('active'); });
-
   if (name === 'schedule') renderSchedule();
   if (name === 'roster') populateRosterSelect();
   if (name === 'admin') { renderAdminEvents(); renderAdminStats(); }
+  if (name === 'profile') loadProfile();
   window.scrollTo(0, 0);
 }
 
@@ -1247,12 +1522,13 @@ function switchAuthTab2(tab) {
   document.getElementById('signupTab2').classList.toggle('active', tab === 'login2');
 }
 
-// Expose functions referenced by inline onclick="" handlers (required since this is a module script)
 Object.assign(window, {
   login, login2, register, register2, googleSignIn, logout,
   addEvent, deleteEvent, openEventSignup, confirmSignup, cancelSignup,
+  addGuestRow, removeGuestRow, selectPayment,
   renderRoster, adminRemove, showPage, openModal, closeModal,
-  switchAuthTab, switchAuthTab2
+  switchAuthTab, switchAuthTab2, switchAdminTab,
+  saveProfile, handleAvatarUpload, populateRosterSelect
 });
 </script>
 </body>
