@@ -424,6 +424,11 @@
      other modal triggered it, not behind it. */
   #playerProfileModal { z-index: 300; }
 
+  /* Login can be triggered from inside another open modal (e.g. a guest
+     tapping "reply" inside the bulletin thread modal), so it needs to sit
+     above whatever modal is already open instead of stacking behind it. */
+  #loginModal { z-index: 300; }
+
   .modal h2 {
     font-family: 'Barlow Condensed', sans-serif;
     font-weight: 900;
