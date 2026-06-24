@@ -2680,13 +2680,28 @@ async function deleteBulletinPost(id) {
     const batch = writeBatch(db);
     batch.delete(doc(db, 'bulletin', id));
     const repliesSnap = await getDocs(collection(db, 'bulletin', id, 'replies'));
-    repliesSnap.forEach(r => batch.delete(r.ref));
+    repliesSnap.forEach(r => {
+      const reply = r.data();
+      // Only include replies in this atomic batch that the current user
+      // is actually allowed to delete (their own, or all of them if admin).
+      // Including someone else's reply here causes the whole batch to be
+      // rejected by the security rules, which silently blocked non-admin
+      // owners from deleting their own post whenever it had replies from
+      // other people.
+      if (currentUser.isAdmin || reply.uid === currentUser.uid) {
+        batch.delete(r.ref);
+      }
+    });
     await batch.commit();
     showToast('Post removed.');
     if (currentThreadPostId === id) closeModal('bulletinThreadModal');
     renderBulletin();
   }
-  catch(e) { showToast('Could not delete.'); }
+  catch(e) {
+    if (e?.code === 'permission-denied') showToast("You don't have permission to delete this post.", true);
+    else showToast('Could not delete.', true);
+    console.error(e);
+  }
 }
 
 // ======================== BULLETIN THREAD (REPLIES) ========================
