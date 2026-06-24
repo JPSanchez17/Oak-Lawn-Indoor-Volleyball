@@ -159,6 +159,11 @@
     transition: all .2s;
     text-transform: uppercase;
     letter-spacing: .5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
   }
 
   .btn-primary { background: linear-gradient(135deg, var(--fire), var(--gold)); color: #000; }
@@ -400,6 +405,11 @@
     transition: transform .2s;
   }
   .modal-overlay.open .modal { transform: translateY(0); }
+
+  /* Player profile is a drill-down opened from other contexts (roster,
+     league board thread, etc.) and should always appear above whatever
+     other modal triggered it, not behind it. */
+  #playerProfileModal { z-index: 300; }
 
   .modal h2 {
     font-family: 'Barlow Condensed', sans-serif;
