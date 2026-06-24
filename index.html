@@ -1002,7 +1002,6 @@ let regsCache = {};
 let selectedEventId = null;
 let selectedPayment = null;
 let guestCount = 0;
-let isWaitlistSignup = false;
 
 // ======================== TOAST ========================
 function showToast(msg, isError = false) {
@@ -1187,27 +1186,18 @@ function renderSchedule() {
       const month = d.toLocaleString('default', { month: 'short' }).toUpperCase();
       const day = d.getDate();
       const evRegs = regsCache[ev.id] || [];
-      const activeRegs = evRegs.filter(r => !r.waitlisted);
-      const waitlistRegs = evRegs.filter(r => r.waitlisted).sort((a,b)=>((a.waitlistedAt?.seconds)||0)-((b.waitlistedAt?.seconds)||0));
-      const taken = activeRegs.reduce((sum, r) => sum + 1 + (r.guests?.length || 0), 0);
+      const taken = evRegs.reduce((sum, r) => sum + 1 + (r.guests?.length || 0), 0);
       const pct = Math.round((taken / ev.spots) * 100);
       const full = taken >= ev.spots;
       const mySignup = currentUser && evRegs.find(r => r.uid === currentUser.uid);
 
       let actionBtn = '';
-      if (mySignup && mySignup.waitlisted) {
-        const pos = waitlistRegs.findIndex(r => r.id === mySignup.id) + 1;
-        const guestLabel = mySignup.guests?.length ? ` +${mySignup.guests.length} guest${mySignup.guests.length > 1 ? 's' : ''}` : '';
-        actionBtn = `<span style="background:rgba(147,51,234,.15);color:var(--violet);padding:2px 10px;border-radius:100px;font-size:13px;font-weight:700">⏳ Waitlisted #${pos}${guestLabel}</span>
-                     <button class="btn btn-outline btn-sm" onclick="cancelSignup('${ev.id}')">Leave Waitlist</button>`;
-      } else if (mySignup) {
+      if (mySignup) {
         const guestLabel = mySignup.guests?.length ? ` +${mySignup.guests.length} guest${mySignup.guests.length > 1 ? 's' : ''}` : '';
         actionBtn = `<span style="color:var(--success);font-weight:700;font-size:14px">✅ Signed Up${guestLabel}</span>
-                     ${mySignup.guests?.length ? `<button class="btn btn-outline btn-sm" onclick="openManageModal('${ev.id}')">Manage</button>` : ''}
                      <button class="btn btn-outline btn-sm" onclick="cancelSignup('${ev.id}')">Cancel</button>`;
       } else if (full) {
-        actionBtn = `${waitlistRegs.length ? `<span style="background:rgba(147,51,234,.15);color:var(--violet);padding:2px 10px;border-radius:100px;font-size:13px;font-weight:700">⏳ ${waitlistRegs.length} on waitlist</span>` : ''}
-                     <button class="btn btn-primary btn-sm" onclick="openEventSignup('${ev.id}')">Join Waitlist</button>`;
+        actionBtn = `<span style="color:var(--danger);font-size:14px;font-weight:600">FULL</span>`;
       } else {
         actionBtn = `<button class="btn btn-primary btn-sm" onclick="openEventSignup('${ev.id}')">Sign Up — $${ev.cost}</button>`;
       }
@@ -1249,13 +1239,9 @@ function openEventSignup(eventId) {
   selectedPayment = null;
   guestCount = 0;
 
-  const activeNow = (regsCache[eventId] || []).filter(r => !r.waitlisted);
-  const takenNow = activeNow.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
-  isWaitlistSignup = takenNow >= ev.spots;
-
-  document.getElementById('esm-title').textContent = isWaitlistSignup ? `${ev.name} (Waitlist)` : ev.name;
+  document.getElementById('esm-title').textContent = ev.name;
   document.getElementById('esm-price').textContent = `$${Number(ev.cost).toFixed(2)}`;
-  document.getElementById('esm-total-line').textContent = isWaitlistSignup ? "This event is full — you'll join the waitlist and be notified if a spot opens up." : '';
+  document.getElementById('esm-total-line').textContent = '';
   document.getElementById('guestRows').innerHTML = '';
   document.getElementById('cashInstructions').classList.remove('show');
   document.getElementById('venmoInstructions').classList.remove('show');
@@ -1273,11 +1259,9 @@ function openEventSignup(eventId) {
 
 function addGuestRow() {
   const ev = eventsCache.find(e => e.id === selectedEventId);
-  if (!isWaitlistSignup) {
-    const taken = (regsCache[selectedEventId] || []).filter(r => !r.waitlisted).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
-    const available = ev ? ev.spots - taken : 0;
-    if (guestCount >= available - 1) return showToast('Not enough spots for more guests.', true);
-  }
+  const taken = (regsCache[selectedEventId] || []).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+  const available = ev ? ev.spots - taken : 0;
+  if (guestCount >= available - 1) return showToast('Not enough spots for more guests.', true);
 
   guestCount++;
   const idx = guestCount;
@@ -1307,8 +1291,7 @@ function updatePriceTotal() {
   const guestRows = document.querySelectorAll('.guest-row');
   const total = (1 + guestRows.length) * ev.cost;
   const line = document.getElementById('esm-total-line');
-  const note = isWaitlistSignup ? "This event is full — you'll join the waitlist and be notified if a spot opens up. " : '';
-  line.textContent = note + (guestRows.length > 0 ? `Total: $${total.toFixed(2)} for you + ${guestRows.length} guest${guestRows.length > 1 ? 's' : ''}` : '');
+  line.textContent = guestRows.length > 0 ? `Total: $${total.toFixed(2)} for you + ${guestRows.length} guest${guestRows.length > 1 ? 's' : ''}` : '';
 }
 
 function selectPayment(type) {
@@ -1341,8 +1324,8 @@ async function confirmSignup() {
     guests.push({ name });
   }
 
-  const taken = existing.filter(r => !r.waitlisted).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
-  const willWaitlist = isWaitlistSignup || (taken + 1 + guests.length > ev.spots);
+  const taken = existing.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+  if (taken + 1 + guests.length > ev.spots) { showToast('Sorry, not enough spots available.', true); return; }
 
   await addDoc(collection(db, 'registrations'), {
     eventId: selectedEventId,
@@ -1352,13 +1335,11 @@ async function confirmSignup() {
     phone: currentUser.phone || '',
     paymentMethod: selectedPayment,
     guests,
-    waitlisted: willWaitlist,
-    waitlistedAt: willWaitlist ? serverTimestamp() : null,
     signedUpAt: serverTimestamp()
   });
 
   closeModal('eventSignupModal');
-  showToast(willWaitlist ? "You're on the waitlist — we'll notify you if a spot opens up! ⏳" : `You're on the roster! See you there 🏐`);
+  showToast(`You're on the roster! See you there 🏐`);
 }
 
 async function cancelSignup(eventId) {
@@ -1366,71 +1347,7 @@ async function cancelSignup(eventId) {
   if (!confirm('Cancel your spot?')) return;
   const mine = (regsCache[eventId] || []).find(r => r.uid === currentUser.uid);
   if (mine) await deleteDoc(doc(db, 'registrations', mine.id));
-  await promoteWaitlist(eventId);
   showToast('Your spot has been cancelled.');
-}
-
-// Remove a single guest from your own registration without cancelling everything
-function openManageModal(eventId) {
-  const reg = (regsCache[eventId] || []).find(r => r.uid === currentUser?.uid);
-  if (!reg) return;
-  selectedEventId = eventId;
-  const el = document.getElementById('manageContent');
-  let html = `<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><span><strong>${reg.name}</strong> <span style="color:var(--muted);font-size:13px">(you)</span></span></div>`;
-  (reg.guests || []).forEach((g, i) => {
-    html += `<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><span>${g.name}</span><button class="btn btn-danger btn-sm" onclick="removeGuestFromReg('${reg.id}', ${i})">Remove</button></div>`;
-  });
-  html += `<p style="font-size:12px;color:var(--muted);margin-top:12px">To cancel your own spot entirely, use Cancel on the schedule page.</p>`;
-  el.innerHTML = html;
-  openModal('manageSignupModal');
-}
-
-async function removeGuestFromReg(regId, guestIndex) {
-  if (!confirm('Remove this guest from your signup?')) return;
-  let eventId = null, regData = null;
-  for (const evId in regsCache) {
-    const found = regsCache[evId].find(r => r.id === regId);
-    if (found) { eventId = evId; regData = found; break; }
-  }
-  if (!regData) return;
-  const newGuests = (regData.guests || []).filter((_, i) => i !== guestIndex);
-  await setDoc(doc(db, 'registrations', regId), { guests: newGuests }, { merge: true });
-  if (eventId) await promoteWaitlist(eventId);
-  showToast('Guest removed.');
-  closeModal('manageSignupModal');
-  openManageModal(eventId);
-}
-
-// Pull the next waitlisted group(s) into the active roster as spots free up
-async function promoteWaitlist(eventId) {
-  const ev = eventsCache.find(e => e.id === eventId);
-  if (!ev) return;
-  try {
-    const snap = await getDocs(query(collection(db, 'registrations'), where('eventId', '==', eventId)));
-    const regs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    const active = regs.filter(r => !r.waitlisted);
-    let available = ev.spots - active.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
-    if (available <= 0) return;
-    const waiting = regs.filter(r => r.waitlisted).sort((a,b)=>((a.waitlistedAt?.seconds)||0)-((b.waitlistedAt?.seconds)||0));
-    const batch = writeBatch(db);
-    let promotedAny = false;
-    for (const r of waiting) {
-      const need = 1 + (r.guests?.length || 0);
-      if (need <= available) {
-        batch.update(doc(db, 'registrations', r.id), { waitlisted: false, waitlistedAt: null });
-        available -= need;
-        promotedAny = true;
-      }
-      if (available <= 0) break;
-    }
-    if (promotedAny) await batch.commit();
-  } catch (e) { console.error('promoteWaitlist error', e); }
-}
-
-async function promoteSpecific(regId) {
-  if (!confirm('Move this person from the waitlist to the active roster?')) return;
-  await setDoc(doc(db, 'registrations', regId), { waitlisted: false, waitlistedAt: null }, { merge: true });
-  showToast('Moved to roster! ✅');
 }
 
 // ======================== ROSTER ========================
@@ -1453,13 +1370,11 @@ function renderRoster() {
   const el = document.getElementById('rosterContent');
   if (!eventId) { el.innerHTML = ''; return; }
 
-  const allRegs = (regsCache[eventId] || []).slice();
-  const evRegs = allRegs.filter(r => !r.waitlisted).sort((a,b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
-  const waitlistRegs = allRegs.filter(r => r.waitlisted).sort((a,b) => ((a.waitlistedAt?.seconds)||0) - ((b.waitlistedAt?.seconds)||0));
+  const evRegs = (regsCache[eventId] || []).slice().sort((a,b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
   const ev = eventsCache.find(e => e.id === eventId);
   const totalSpots = evRegs.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
 
-  if (!evRegs.length && !waitlistRegs.length) {
+  if (!evRegs.length) {
     el.innerHTML = `<div class="empty"><div class="empty-icon">🏐</div><p>Nobody signed up yet for this session.</p></div>`;
     return;
   }
@@ -1498,7 +1413,7 @@ function renderRoster() {
     }
   }
 
-  let mainTable = evRegs.length ? `
+  el.innerHTML = `
     <div class="card" style="padding:0;overflow:hidden">
       <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
         <span style="font-weight:600">${totalSpots} / ${ev ? ev.spots : '?'} spots filled</span>
@@ -1514,51 +1429,46 @@ function renderRoster() {
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>` : `<div class="empty"><div class="empty-icon">🏐</div><p>No one on the active roster yet.</p></div>`;
-
-  let waitlistTable = '';
-  if (waitlistRegs.length) {
-    let wRows = '';
-    let wNum = 1;
-    for (const r of waitlistRegs) {
-      const groupSize = 1 + (r.guests?.length || 0);
-      const guestNames = (r.guests || []).map(g => g.name).join(', ');
-      wRows += `<tr>
-        <td style="color:var(--violet);font-weight:700">#${wNum++}</td>
-        <td><strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${r.name}</strong>${guestNames ? `<div style="color:var(--muted);font-size:12px;margin-top:2px">+ ${guestNames}</div>` : ''}</td>
-        <td style="color:var(--muted)">${groupSize} spot${groupSize > 1 ? 's' : ''}</td>
-        ${isAdmin ? `<td style="color:var(--muted)">${r.email}</td>` : ''}
-        ${isAdmin ? `<td style="color:var(--muted)">${r.phone || '—'}</td>` : ''}
-        ${isAdmin ? `<td><button class="btn btn-success btn-sm" onclick="promoteSpecific('${r.id}')">Move to Roster</button> <button class="btn btn-danger btn-sm" onclick="adminRemove('${r.id}')">Remove</button></td>` : ''}
-      </tr>`;
-    }
-    waitlistTable = `
-    <div style="margin-top:24px;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:18px;color:var(--violet);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">⏳ Waitlist (${waitlistRegs.length})</div>
-    <div class="card" style="padding:0;overflow:hidden;border-color:rgba(147,51,234,.3)">
-      <table class="roster-table">
-        <thead><tr>
-          <th>#</th><th>Name</th><th>Size</th>
-          ${isAdmin ? '<th>Email</th>' : ''}
-          ${isAdmin ? '<th>Phone</th>' : ''}
-          ${isAdmin ? '<th>Action</th>' : ''}
-        </tr></thead>
-        <tbody>${wRows}</tbody>
-      </table>
     </div>`;
-  }
-
-  el.innerHTML = mainTable + waitlistTable;
 }
+
 async function adminRemove(regId) {
   if (!confirm('Remove this person?')) return;
-  let eventId = null;
-  for (const evId in regsCache) { if (regsCache[evId].find(r => r.id === regId)) { eventId = evId; break; } }
   await deleteDoc(doc(db, 'registrations', regId));
-  if (eventId) await promoteWaitlist(eventId);
   showToast('Removed.');
 }
-}
 
+async function openPlayerProfile(uid) {
+  try {
+    const snap = await getDoc(doc(db, 'users', uid));
+    const p = snap.exists() ? snap.data() : null;
+    if (!p) return showToast('Profile not found.', true);
+
+    const avatarEl = document.getElementById('ppAvatar');
+    if (p.avatarUrl) {
+      avatarEl.innerHTML = `<img src="${p.avatarUrl}" style="width:90px;height:90px;border-radius:50%;object-fit:cover">`;
+      avatarEl.style.padding = '0';
+    } else {
+      avatarEl.innerHTML = '🏐';
+      avatarEl.style.padding = '';
+    }
+
+    document.getElementById('ppName').textContent = `${p.firstName || ''} ${p.lastName || ''}`.trim();
+
+    const skillEl = document.getElementById('ppSkill');
+    skillEl.innerHTML = p.skill
+      ? `<span style="background:rgba(91,111,212,.2);color:var(--sky);border-radius:20px;padding:4px 14px;font-size:13px;font-weight:700">${p.skill}</span>`
+      : '';
+
+    const bioEl = document.getElementById('ppBio');
+    bioEl.textContent = p.bio || 'No bio yet.';
+    bioEl.style.display = p.bio ? '' : 'none';
+
+    openModal('playerProfileModal');
+  } catch (e) {
+    showToast('Could not load profile.', true);
+  }
+}
 
 // ======================== PROFILE ========================
 async function loadProfile() {
@@ -1859,8 +1769,7 @@ Object.assign(window, {
   switchAuthTab, switchAuthTab2, switchAdminTab, openPlayerProfile,
   saveProfile, handleAvatarUpload, populateRosterSelect,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
-  openWaiverModal, unlockWaiverCheckbox,
-  openManageModal, removeGuestFromReg, promoteSpecific
+  openWaiverModal, unlockWaiverCheckbox
 });
 </script>
 
@@ -1877,15 +1786,6 @@ Object.assign(window, {
   </div>
 </div>
 
-  <!-- ======================== MANAGE SIGNUP MODAL ======================== -->
-<div class="modal-overlay" id="manageSignupModal">
-  <div class="modal" style="position:relative">
-    <button class="modal-close" onclick="closeModal('manageSignupModal')">✕</button>
-    <h2>Manage My Signup</h2>
-    <div id="manageContent"></div>
-  </div>
-</div>
-  
 <!-- ======================== WAIVER MODAL ======================== -->
 <div class="modal-overlay" id="waiverModal">
   <div class="modal" style="max-width:680px;position:relative">
