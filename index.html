@@ -1200,10 +1200,18 @@ function showToast(msg, isError = false) {
 
 // ======================== AUTH ========================
 async function ensureUserDoc(uid, data) {
+  const { email, phone, ...publicData } = data;
   const ref = doc(db, 'users', uid);
   const snap = await getDoc(ref);
-  if (!snap.exists()) await setDoc(ref, data);
-  return (await getDoc(ref)).data();
+  if (!snap.exists()) {
+    await setDoc(ref, publicData);
+    await setDoc(doc(db, 'users', uid, 'private', 'contact'), { email: email || '', phone: phone || '' });
+  }
+  const [pubSnap, privSnap] = await Promise.all([
+    getDoc(ref),
+    getDoc(doc(db, 'users', uid, 'private', 'contact')).catch(() => null)
+  ]);
+  return { ...pubSnap.data(), email: privSnap?.data()?.email || email || '', phone: privSnap?.data()?.phone || '' };
 }
 
 function friendlyAuthError(err) {
@@ -1234,7 +1242,8 @@ async function doRegister(first, last, email, pass, modalId) {
   if (pass.length < 8) return showToast('Password must be at least 8 characters.', true);
   try {
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
-    await setDoc(doc(db, 'users', cred.user.uid), { firstName: first, lastName: last, email, phone: '', skill: '', bio: '', avatarUrl: '' });
+    await setDoc(doc(db, 'users', cred.user.uid), { firstName: first, lastName: last, skill: '', bio: '', avatarUrl: '' });
+    await setDoc(doc(db, 'users', cred.user.uid, 'private', 'contact'), { email, phone: '' });
     closeModal(modalId);
     showToast(`Welcome, ${first}! 🎉`);
   } catch (err) { showToast(friendlyAuthError(err), true); }
@@ -1268,6 +1277,7 @@ onAuthStateChanged(auth, async (user) => {
 
     currentUser = { uid: user.uid, email: user.email, firstName: profile.firstName, lastName: profile.lastName, phone: profile.phone || '', skill: profile.skill || '', bio: profile.bio || '', avatarUrl: profile.avatarUrl || '', isAdmin: user.email === ADMIN_EMAIL };
     afterLogin();
+    restorePageFromHash();
   } else {
     currentUser = null;
     document.getElementById('navUser').innerHTML = `
@@ -1276,6 +1286,7 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById('adminNavBtn').style.display = 'none';
     document.getElementById('rosterNavBtn').style.display = 'none';
     renderSchedule();
+    restorePageFromHash();
   }
 });
 
@@ -1340,7 +1351,10 @@ async function deleteEvent(id) {
   const batch = writeBatch(db);
   batch.delete(doc(db, 'events', id));
   const regsSnap = await getDocs(query(collection(db, 'registrations'), where('eventId', '==', id)));
-  regsSnap.forEach(r => batch.delete(r.ref));
+  regsSnap.forEach(r => {
+    batch.delete(r.ref);
+    batch.delete(doc(db, 'registrations', r.id, 'private', 'contact'));
+  });
   await batch.commit();
   showToast('Event deleted.');
 }
@@ -1355,7 +1369,10 @@ function cleanOldEvents() {
     for (const ev of old) {
       batch.delete(doc(db, 'events', ev.id));
       const regsSnap = await getDocs(query(collection(db, 'registrations'), where('eventId', '==', ev.id)));
-      regsSnap.forEach(r => batch.delete(r.ref));
+      regsSnap.forEach(r => {
+        batch.delete(r.ref);
+        batch.delete(doc(db, 'registrations', r.id, 'private', 'contact'));
+      });
     }
     await batch.commit();
   })();
@@ -1546,16 +1563,18 @@ async function confirmSignup() {
   // If full, add to waitlist (guests not supported on waitlist)
   if (isFull) {
     if (guests.length > 0) { showToast('Waitlist sign-ups are for one person only — no guests.', true); return; }
-    await addDoc(collection(db, 'registrations'), {
+    const regRef = await addDoc(collection(db, 'registrations'), {
       eventId: selectedEventId,
       uid: currentUser.uid,
-      email: currentUser.email,
       name: `${currentUser.firstName} ${currentUser.lastName}`,
-      phone: currentUser.phone || '',
-      paymentMethod: selectedPayment,
       guests: [],
       waitlisted: true,
       signedUpAt: serverTimestamp()
+    });
+    await setDoc(doc(db, 'registrations', regRef.id, 'private', 'contact'), {
+      email: currentUser.email,
+      phone: currentUser.phone || '',
+      paymentMethod: selectedPayment
     });
     closeModal('eventSignupModal');
     showToast(`Added to the waitlist! We'll move you up if a spot opens. 🏐`);
@@ -1564,16 +1583,18 @@ async function confirmSignup() {
 
   if (taken + 1 + guests.length > ev.spots) { showToast('Sorry, not enough spots available.', true); return; }
 
-  await addDoc(collection(db, 'registrations'), {
+  const regRef = await addDoc(collection(db, 'registrations'), {
     eventId: selectedEventId,
     uid: currentUser.uid,
-    email: currentUser.email,
     name: `${currentUser.firstName} ${currentUser.lastName}`,
-    phone: currentUser.phone || '',
-    paymentMethod: selectedPayment,
     guests,
     waitlisted: false,
     signedUpAt: serverTimestamp()
+  });
+  await setDoc(doc(db, 'registrations', regRef.id, 'private', 'contact'), {
+    email: currentUser.email,
+    phone: currentUser.phone || '',
+    paymentMethod: selectedPayment
   });
 
   closeModal('eventSignupModal');
@@ -1654,6 +1675,7 @@ async function cancelSelfFromGroup(eventId) {
 
   try {
     closeModal('manageGroupModal');
+    await deleteDoc(doc(db, 'registrations', mine.id, 'private', 'contact')).catch(() => {});
     await deleteDoc(doc(db, 'registrations', mine.id));
     const spotsFreed = 1 + (mine.guests?.length || 0);
     await promoteFromWaitlist(eventId, spotsFreed);
@@ -1685,6 +1707,7 @@ async function cancelSignup(eventId) {
   const confirmMsg = wasMain ? 'Cancel your spot? The next person on the waitlist will be moved up.' : 'Leave the waitlist?';
   if (!confirm(confirmMsg)) return;
 
+  await deleteDoc(doc(db, 'registrations', mine.id, 'private', 'contact')).catch(() => {});
   await deleteDoc(doc(db, 'registrations', mine.id));
 
   if (wasMain) {
@@ -1709,7 +1732,7 @@ function populateRosterSelect() {
   renderRoster();
 }
 
-function renderRoster() {
+async function renderRoster() {
   const sel = document.getElementById('rosterSelect');
   if (!sel) return;
   const eventId = sel.value;
@@ -1729,21 +1752,34 @@ function renderRoster() {
 
   const isAdmin = currentUser?.isAdmin;
 
+  // Admins need email/phone/payment, which live in a private subcollection
+  const contactByRegId = {};
+  if (isAdmin) {
+    el.innerHTML = '<div style="color:var(--muted);padding:12px">Loading roster...</div>';
+    await Promise.all(allRegs.map(async r => {
+      try {
+        const snap = await getDoc(doc(db, 'registrations', r.id, 'private', 'contact'));
+        if (snap.exists()) contactByRegId[r.id] = snap.data();
+      } catch (e) { /* no contact doc or no access — leave blank */ }
+    }));
+  }
+
   function buildRows(regs) {
     let rows = '';
     let num = 1;
     for (const r of regs) {
-      const payBadge = r.paymentMethod === 'cash'
+      const contact = contactByRegId[r.id] || {};
+      const payBadge = contact.paymentMethod === 'cash'
         ? '<span style="background:rgba(34,197,94,.15);color:var(--success);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">💵 Cash</span>'
-        : r.paymentMethod === 'venmo'
+        : contact.paymentMethod === 'venmo'
         ? '<span style="background:rgba(91,111,212,.15);color:var(--sky);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">📱 Venmo/Zelle</span>'
         : '';
 
       rows += `<tr>
         <td style="color:var(--muted)">${num++}</td>
         <td><strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${r.name}</strong></td>
-        ${isAdmin ? `<td style="color:var(--muted)">${r.email}</td>` : ''}
-        ${isAdmin ? `<td style="color:var(--muted)">${r.phone || '—'}</td>` : ''}
+        ${isAdmin ? `<td style="color:var(--muted)">${contact.email || '—'}</td>` : ''}
+        ${isAdmin ? `<td style="color:var(--muted)">${contact.phone || '—'}</td>` : ''}
         ${isAdmin ? `<td>${payBadge}</td>` : ''}
         <td style="color:var(--muted);font-size:13px">${r.signedUpAt?.toDate ? r.signedUpAt.toDate().toLocaleDateString() : ''}</td>
         ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemove('${r.id}', '${eventId}', ${r.waitlisted ? 'true' : 'false'})">Remove</button></td>` : ''}
@@ -1813,6 +1849,7 @@ async function adminRemove(regId, eventId, isWaitlisted) {
   if (!confirm('Remove this person?')) return;
   const allRegs = regsCache[eventId] || [];
   const reg = allRegs.find(r => r.id === regId);
+  await deleteDoc(doc(db, 'registrations', regId, 'private', 'contact')).catch(() => {});
   await deleteDoc(doc(db, 'registrations', regId));
   if (!isWaitlisted && eventId) {
     const spotsFreed = 1 + (reg?.guests?.length || 0);
@@ -1858,11 +1895,15 @@ async function openPlayerProfile(uid) {
 // ======================== PROFILE ========================
 async function loadProfile() {
   if (!currentUser) return;
-  const snap = await getDoc(doc(db, 'users', currentUser.uid));
+  const [snap, contactSnap] = await Promise.all([
+    getDoc(doc(db, 'users', currentUser.uid)),
+    getDoc(doc(db, 'users', currentUser.uid, 'private', 'contact')).catch(() => null)
+  ]);
   const p = snap.data() || {};
+  const contact = contactSnap?.data() || {};
   document.getElementById('profileFirst').value = p.firstName || '';
   document.getElementById('profileLast').value = p.lastName || '';
-  document.getElementById('profilePhone').value = p.phone || '';
+  document.getElementById('profilePhone').value = contact.phone || '';
   document.getElementById('profileSkill').value = p.skill || '';
   document.getElementById('profileBio').value = p.bio || '';
   document.getElementById('profileDisplayName').textContent = `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Your Name';
@@ -1883,7 +1924,8 @@ async function saveProfile() {
   const bio = document.getElementById('profileBio').value.trim();
   if (!first || !last) return showToast('First and last name are required.', true);
 
-  await setDoc(doc(db, 'users', currentUser.uid), { firstName: first, lastName: last, email: currentUser.email, phone, skill, bio }, { merge: true });
+  await setDoc(doc(db, 'users', currentUser.uid), { firstName: first, lastName: last, skill, bio }, { merge: true });
+  await setDoc(doc(db, 'users', currentUser.uid, 'private', 'contact'), { email: currentUser.email, phone }, { merge: true });
   currentUser.firstName = first; currentUser.lastName = last; currentUser.phone = phone;
   document.getElementById('profileDisplayName').textContent = `${first} ${last}`;
   showToast('Profile saved! ✅');
@@ -1954,6 +1996,17 @@ async function loadAdminMembers() {
     const members = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (!members.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">👥</div><p>No members yet.</p></div>'; return; }
 
+    await Promise.all(members.map(async m => {
+      try {
+        const contactSnap = await getDoc(doc(db, 'users', m.id, 'private', 'contact'));
+        if (contactSnap.exists()) {
+          const c = contactSnap.data();
+          m.email = c.email;
+          m.phone = c.phone;
+        }
+      } catch (e) { /* leave blank if not accessible */ }
+    }));
+
     el.innerHTML = `
       <div class="card" style="padding:0;overflow:hidden">
         <table class="roster-table">
@@ -2022,7 +2075,10 @@ function renderAdminEvents() {
 }
 
 // ======================== PAGES ========================
+const VALID_PAGES = ['home', 'rules', 'schedule', 'bulletin', 'roster', 'profile', 'admin'];
+
 function showPage(name) {
+  if (!VALID_PAGES.includes(name)) name = 'home';
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
@@ -2033,7 +2089,24 @@ function showPage(name) {
   if (name === 'profile') loadProfile();
   if (name === 'bulletin') renderBulletin();
   window.scrollTo(0, 0);
+  if (window.location.hash.slice(1) !== name) {
+    history.replaceState(null, '', '#' + name);
+  }
 }
+
+function restorePageFromHash() {
+  const name = window.location.hash.slice(1);
+  if (!VALID_PAGES.includes(name) || name === 'home') return;
+  // Pages that need a signed-in user fall back to home if not logged in yet
+  if ((name === 'roster' || name === 'profile') && !currentUser) return;
+  if (name === 'admin' && !(currentUser && currentUser.isAdmin)) return;
+  showPage(name);
+}
+
+window.addEventListener('hashchange', () => {
+  const name = window.location.hash.slice(1);
+  if (VALID_PAGES.includes(name)) showPage(name);
+});
 
 // ======================== MODALS ========================
 function openModal(id) { document.getElementById(id).classList.add('open'); }
