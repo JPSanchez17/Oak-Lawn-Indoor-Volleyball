@@ -1413,7 +1413,6 @@ onAuthStateChanged(auth, async (user) => {
     friendsCache = []; friendUidSet = new Set(); incomingRequests = []; outgoingRequests = [];
     conversationsCache = []; currentChatUid = null;
     if (unsubMessages) { unsubMessages(); unsubMessages = null; }
-    stopCoreListeners();
     renderSchedule();
     restorePageFromHash();
   }
@@ -1433,22 +1432,17 @@ function afterLogin() {
   document.getElementById('rosterNavBtn').style.display = '';
   document.getElementById('messagesNavBtn').style.display = '';
   document.getElementById('adminNavBtn').style.display = currentUser.isAdmin ? '' : 'none';
-  startCoreListeners();
   if (currentUser.isAdmin) renderAdminEvents();
   renderSchedule();
   populateRosterSelect();
   startFriendsAndMessagesListeners();
 }
 
-// ======================== EVENTS LIVE ========================
-// These listeners require request.auth != null per the Firestore rules, so
-// they're started after login (see afterLogin()) instead of at module load.
-// Starting them immediately on page load would race with Firebase Auth
-// resolving the session: an unauthenticated initial subscribe attempt gets
-// a permission-denied error and the listener dies for good, which is why
-// new sign-ups/registrations wouldn't show up live until a full refresh
-// re-created the listener (and happened to win the race that time).
-function startCoreListeners() {
+// ======================== EVENTS LIVE (PUBLIC) ========================
+// events + registrations are public reads (see Firestore rules), so these
+// listeners run for everyone — logged in or not — and start as soon as the
+// script loads rather than waiting on auth state.
+function startPublicListeners() {
   if (unsubEvents || unsubRegistrations) return; // already running
   unsubEvents = onSnapshot(query(collection(db, 'events'), orderBy('date')), (snap) => {
     eventsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1473,13 +1467,8 @@ function startCoreListeners() {
     }
   }, (err) => console.error('registrations listener error', err));
 }
+startPublicListeners();
 
-function stopCoreListeners() {
-  if (unsubEvents) { unsubEvents(); unsubEvents = null; }
-  if (unsubRegistrations) { unsubRegistrations(); unsubRegistrations = null; }
-  eventsCache = [];
-  regsCache = {};
-}
 
 async function addEvent() {
   const name = document.getElementById('adm-name').value.trim();
