@@ -1261,6 +1261,8 @@ let selectedEventId = null;
 let selectedPayment = null;
 let guestCount = 0;
 let currentManageGroupEventId = null;
+let unsubEvents = null;
+let unsubRegistrations = null;
 
 // ======================== FRIENDS / MESSAGES STATE ========================
 let friendsCache = [];           // [{uid, firstName, lastName, avatarUrl}]
@@ -1373,6 +1375,7 @@ onAuthStateChanged(auth, async (user) => {
     friendsCache = []; friendUidSet = new Set(); incomingRequests = []; outgoingRequests = [];
     conversationsCache = []; currentChatUid = null;
     if (unsubMessages) { unsubMessages(); unsubMessages = null; }
+    stopCoreListeners();
     renderSchedule();
     restorePageFromHash();
   }
@@ -1392,6 +1395,7 @@ function afterLogin() {
   document.getElementById('rosterNavBtn').style.display = '';
   document.getElementById('messagesNavBtn').style.display = '';
   document.getElementById('adminNavBtn').style.display = currentUser.isAdmin ? '' : 'none';
+  startCoreListeners();
   if (currentUser.isAdmin) renderAdminEvents();
   renderSchedule();
   populateRosterSelect();
@@ -1399,28 +1403,45 @@ function afterLogin() {
 }
 
 // ======================== EVENTS LIVE ========================
-onSnapshot(query(collection(db, 'events'), orderBy('date')), (snap) => {
-  eventsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  renderSchedule();
-  if (currentUser?.isAdmin) renderAdminEvents();
-  populateRosterSelect();
-}, (err) => console.error('events listener error', err));
+// These listeners require request.auth != null per the Firestore rules, so
+// they're started after login (see afterLogin()) instead of at module load.
+// Starting them immediately on page load would race with Firebase Auth
+// resolving the session: an unauthenticated initial subscribe attempt gets
+// a permission-denied error and the listener dies for good, which is why
+// new sign-ups/registrations wouldn't show up live until a full refresh
+// re-created the listener (and happened to win the race that time).
+function startCoreListeners() {
+  if (unsubEvents || unsubRegistrations) return; // already running
+  unsubEvents = onSnapshot(query(collection(db, 'events'), orderBy('date')), (snap) => {
+    eventsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderSchedule();
+    if (currentUser?.isAdmin) renderAdminEvents();
+    populateRosterSelect();
+  }, (err) => console.error('events listener error', err));
 
-onSnapshot(collection(db, 'registrations'), (snap) => {
+  unsubRegistrations = onSnapshot(collection(db, 'registrations'), (snap) => {
+    regsCache = {};
+    snap.docs.forEach(d => {
+      const r = { id: d.id, ...d.data() };
+      if (!regsCache[r.eventId]) regsCache[r.eventId] = [];
+      regsCache[r.eventId].push(r);
+    });
+    renderSchedule();
+    if (currentUser?.isAdmin) renderAdminEvents();
+    renderRoster();
+    const openGroupModal = document.getElementById('manageGroupModal');
+    if (openGroupModal && openGroupModal.classList.contains('open') && currentManageGroupEventId) {
+      openManageGroup(currentManageGroupEventId);
+    }
+  }, (err) => console.error('registrations listener error', err));
+}
+
+function stopCoreListeners() {
+  if (unsubEvents) { unsubEvents(); unsubEvents = null; }
+  if (unsubRegistrations) { unsubRegistrations(); unsubRegistrations = null; }
+  eventsCache = [];
   regsCache = {};
-  snap.docs.forEach(d => {
-    const r = { id: d.id, ...d.data() };
-    if (!regsCache[r.eventId]) regsCache[r.eventId] = [];
-    regsCache[r.eventId].push(r);
-  });
-  renderSchedule();
-  if (currentUser?.isAdmin) renderAdminEvents();
-  renderRoster();
-  const openGroupModal = document.getElementById('manageGroupModal');
-  if (openGroupModal && openGroupModal.classList.contains('open') && currentManageGroupEventId) {
-    openManageGroup(currentManageGroupEventId);
-  }
-}, (err) => console.error('registrations listener error', err));
+}
 
 async function addEvent() {
   const name = document.getElementById('adm-name').value.trim();
