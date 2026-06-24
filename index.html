@@ -655,10 +655,9 @@
           <label>Skill Level</label>
           <select id="bb-skill" style="background:var(--card);border:1.5px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;width:100%;font-family:'Barlow',sans-serif;font-size:15px">
             <option value="Any">Any Level</option>
-            <option value="Beginner">Beginner</option>
-            <option value="Intermediate">Intermediate</option>
-            <option value="Advanced">Advanced</option>
-            <option value="Competitive">Competitive</option>
+            <option value="A Level">A Level</option>
+            <option value="B Level">B Level</option>
+            <option value="C Level">C Level</option>
           </select>
         </div>
       </div>
@@ -945,6 +944,17 @@
         <div style="font-size:12px;color:var(--muted);margin-top:4px">Jude Sanchez — Oak Lawn Volleyball</div>
       </div>
       <p style="font-size:13px;color:var(--muted);margin-top:10px">Once sent, click confirm below.</p>
+    </div>
+
+    <div style="margin-top:20px;padding:16px;background:rgba(255,255,255,.03);border:1.5px solid var(--border);border-radius:10px">
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:14px">
+        <input type="checkbox" id="checkAge" style="margin-top:3px;accent-color:var(--fire);width:16px;height:16px;flex-shrink:0">
+        <span style="font-size:13px;color:var(--muted);line-height:1.5">I certify that I am at least 18 years old, or I am the parent/legal guardian of any participant under 18 included in this registration.</span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+        <input type="checkbox" id="checkWaiver" style="margin-top:3px;accent-color:var(--fire);width:16px;height:16px;flex-shrink:0">
+        <span style="font-size:13px;color:var(--muted);line-height:1.5">I have read and agree to the <a href="#" onclick="openModal('waiverModal');return false;" style="color:var(--sky);text-decoration:underline">Terms and Conditions &amp; Liability Waiver</a>.</span>
+      </label>
     </div>
 
     <div style="margin-top:16px" id="confirmSection" style="display:none">
@@ -1238,6 +1248,8 @@ function openEventSignup(eventId) {
   document.getElementById('confirmSection').style.display = 'none';
   document.getElementById('payOptCash').classList.remove('selected');
   document.getElementById('payOptVenmo').classList.remove('selected');
+  document.getElementById('checkAge').checked = false;
+  document.getElementById('checkWaiver').checked = false;
 
   openModal('eventSignupModal');
 }
@@ -1291,6 +1303,8 @@ function selectPayment(type) {
 async function confirmSignup() {
   if (!currentUser || !selectedEventId) return;
   if (!selectedPayment) return showToast('Please choose a payment method.', true);
+  if (!document.getElementById('checkAge').checked) return showToast('Please certify the age requirement.', true);
+  if (!document.getElementById('checkWaiver').checked) return showToast('Please agree to the Terms and Conditions & Liability Waiver.', true);
   const ev = eventsCache.find(e => e.id === selectedEventId);
   if (!ev) return;
 
@@ -1756,6 +1770,48 @@ Object.assign(window, {
       <div id="ppSkill" style="margin-top:6px"></div>
     </div>
     <div id="ppBio" style="color:var(--muted);font-size:15px;line-height:1.6;text-align:left;background:rgba(255,255,255,.03);border-radius:10px;padding:14px;margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- ======================== WAIVER MODAL ======================== -->
+<div class="modal-overlay" id="waiverModal">
+  <div class="modal" style="max-width:680px;position:relative">
+    <button class="modal-close" onclick="closeModal('waiverModal')">✕</button>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:24px;color:var(--gold);text-transform:uppercase;margin-bottom:16px">Terms and Conditions &amp; Liability Waiver</div>
+    <div style="max-height:60vh;overflow-y:auto;padding-right:8px;font-size:13px;color:var(--muted);line-height:1.7">
+      <p style="margin-bottom:12px">By registering for or participating in any activity, event, league, practice, open gym, training session, or use of facilities operated by Oak Lawn Indoor Volleyball ("OLIV"), the individual completing this registration ("Registrant") acknowledges and agrees that this waiver applies to both the Registrant and any additional participants or guests listed or registered by the Registrant (collectively, the "Participants"). The Registrant represents that they have the authority to agree to these terms on behalf of all Participants they register.</p>
+
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">Acknowledgment of Risks</div>
+      <p style="margin-bottom:12px">Participants acknowledge that volleyball and related activities involve inherent risks, including but not limited to collisions, falls, contact with other participants, equipment-related incidents, sprains, strains, illness, property damage, and other injuries. These risks may arise from the actions or omissions of participants, spectators, staff, equipment, or conditions of the premises.</p>
+
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">Assumption of Risk</div>
+      <p style="margin-bottom:12px">All Participants voluntarily assume full responsibility for any risk of injury, illness, death, property damage, or other loss arising from or related to participation in OLIV activities, including risks resulting from the actions or negligence of other participants, spectators, or staff.</p>
+
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">Release of Liability</div>
+      <p style="margin-bottom:12px">To the fullest extent permitted by law, the Registrant and all Participants, on behalf of themselves and their respective heirs, executors, administrators, representatives, and assigns, release, waive, discharge, and hold harmless OLIV, its owners, officers, employees, volunteers, contractors, sponsors, and affiliates from any and all claims, demands, actions, causes of action, damages, losses, or liabilities arising from participation in OLIV activities, including claims based on ordinary negligence.</p>
+
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">Medical Treatment</div>
+      <p style="margin-bottom:12px">In the event of injury or medical emergency involving any Participant, OLIV staff may, but is not obligated to, arrange for medical assistance at the Participant's expense. Participants acknowledge that OLIV is not responsible for the quality, availability, or cost of any medical services provided.</p>
+
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">Facility Rules and Conduct</div>
+      <p style="margin-bottom:12px">Participants agree to follow all facility rules, policies, and instructions provided by OLIV staff. OLIV reserves the right to refuse service or remove any Participant who violates facility rules, acts in an unsafe manner, or disrupts the experience of others, with or without refund.</p>
+
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">Property and Personal Belongings</div>
+      <p style="margin-bottom:12px">OLIV is not responsible for the loss, theft, or damage of personal property belonging to any Participant.</p>
+
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">Indemnification</div>
+      <p style="margin-bottom:12px">The Registrant and Participants agree to indemnify, defend, and hold harmless OLIV from any claims, damages, losses, liabilities, costs, or expenses (including reasonable attorney's fees) arising from their participation, conduct, or breach of these terms.</p>
+
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">Photography and Media</div>
+      <p style="margin-bottom:12px">Participants grant OLIV permission to use photographs, video recordings, or other media captured during activities for promotional, marketing, educational, or informational purposes without compensation.</p>
+
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">Governing Law and Severability</div>
+      <p style="margin-bottom:12px">This agreement shall be governed by and construed in accordance with the laws of the State of Illinois. If any provision of this agreement is determined to be invalid or unenforceable, the remaining provisions shall remain in full force and effect.</p>
+
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px">Acknowledgment</div>
+      <p>By submitting this registration, the Registrant confirms that they have read, understood, and voluntarily agree to these Terms and Conditions and Liability Waiver on behalf of themselves and all Participants included in the registration.</p>
+    </div>
+    <button class="btn btn-primary btn-full" style="margin-top:20px" onclick="closeModal('waiverModal')">Close</button>
   </div>
 </div>
 
