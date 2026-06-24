@@ -1253,8 +1253,6 @@ function openEventSignup(eventId) {
   document.getElementById('checkWaiver').disabled = true;
   document.getElementById('checkWaiver').style.opacity = '0.4';
   document.getElementById('checkWaiver').style.cursor = 'not-allowed';
-  const wrc = document.getElementById('waiverReadCheckbox');
-  if (wrc) wrc.checked = false;
 
   openModal('eventSignupModal');
 }
@@ -1309,7 +1307,7 @@ async function confirmSignup() {
   if (!currentUser || !selectedEventId) return;
   if (!selectedPayment) return showToast('Please choose a payment method.', true);
   if (!document.getElementById('checkAge').checked) return showToast('Please certify the age requirement.', true);
-  if (!document.getElementById('checkWaiver').checked) return showToast('Please agree to the Terms and Conditions & Liability Waiver.', true);
+  if (!document.getElementById('checkWaiver').checked) return showToast('Please read and agree to the Terms and Conditions & Liability Waiver.', true);
   const ev = eventsCache.find(e => e.id === selectedEventId);
   if (!ev) return;
 
@@ -1761,8 +1759,6 @@ function unlockWaiverCheckbox() {
   cb.disabled = false;
   cb.style.opacity = '1';
   cb.style.cursor = 'pointer';
-  const hint = document.getElementById('waiverHint');
-  if (hint) hint.style.display = 'none';
 }
 
 Object.assign(window, {
@@ -1827,10 +1823,10 @@ Object.assign(window, {
       <div style="font-weight:700;color:var(--text);margin-bottom:6px">Acknowledgment</div>
       <p>By submitting this registration, the Registrant confirms that they have read, understood, and voluntarily agree to these Terms and Conditions and Liability Waiver on behalf of themselves and all Participants included in the registration.</p>
     </div>
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:20px;padding:14px;background:rgba(255,255,255,.04);border:1.5px solid var(--border);border-radius:8px">
-      <input type="checkbox" id="waiverReadCheckbox" style="accent-color:var(--fire);width:18px;height:18px;flex-shrink:0" onclick="if(this.checked){closeModal('waiverModal');unlockWaiverCheckbox();}">
-      <span style="font-size:14px;color:var(--text);font-weight:600">I have read and understand the waiver</span>
-    </label>
+    <button id="waiverConfirmBtn" onclick="closeModal('waiverModal');unlockWaiverCheckbox();" style="margin-top:20px;width:100%;padding:14px;background:linear-gradient(135deg,#16a34a,#22c55e);border:none;border-radius:8px;color:#000;font-family:'Barlow',sans-serif;font-weight:700;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:opacity .2s">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      I Have Read and Understand the Waiver
+    </button>
   </div>
 </div>
 
