@@ -1214,8 +1214,12 @@ function renderSchedule() {
       let actionBtn = '';
       if (myMainSignup) {
         const guestLabel = myMainSignup.guests?.length ? ` +${myMainSignup.guests.length} guest${myMainSignup.guests.length > 1 ? 's' : ''}` : '';
+        const hasGuests = myMainSignup.guests?.length > 0;
         actionBtn = `<span style="color:var(--success);font-weight:700;font-size:14px">✅ Signed Up${guestLabel}</span>
-                     <button class="btn btn-outline btn-sm" onclick="cancelSignup('${ev.id}')">Cancel</button>`;
+                     ${hasGuests
+                       ? `<button class="btn btn-outline btn-sm" onclick="openManageGroup('${ev.id}')">Manage Group</button>`
+                       : `<button class="btn btn-outline btn-sm" onclick="cancelSignup('${ev.id}')">Cancel</button>`
+                     }`;
       } else if (myWaitlist) {
         actionBtn = `<span class="waitlist-badge">⏳ Waitlist #${waitPos}</span>
                      <button class="btn btn-outline btn-sm" style="margin-top:4px" onclick="cancelSignup('${ev.id}')">Leave Waitlist</button>`;
@@ -1395,6 +1399,90 @@ async function confirmSignup() {
   showToast(`You're on the roster! See you there 🏐`);
 }
 
+
+// ======================== MANAGE GROUP ========================
+function openManageGroup(eventId) {
+  if (!currentUser) return;
+  const allRegs = regsCache[eventId] || [];
+  const mine = allRegs.find(r => r.uid === currentUser.uid && !r.waitlisted);
+  if (!mine) return;
+
+  const ev = eventsCache.find(e => e.id === eventId);
+  const modal = document.getElementById('manageGroupModal');
+  document.getElementById('mgm-title').textContent = ev ? ev.name : 'Your Group';
+
+  const listEl = document.getElementById('mgm-list');
+  let html = `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:rgba(34,197,94,.07);border-radius:8px;margin-bottom:8px">
+      <div>
+        <div style="font-weight:700;color:var(--text)">${mine.name} <span style="font-size:12px;color:var(--success);font-weight:700">YOU</span></div>
+        <div style="font-size:13px;color:var(--muted)">Primary registrant</div>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="cancelSelfFromGroup('${eventId}')">Cancel My Spot</button>
+    </div>`;
+
+  (mine.guests || []).forEach((g, i) => {
+    html += `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
+      <div>
+        <div style="font-weight:600;color:var(--text)">${g.name}</div>
+        <div style="font-size:13px;color:var(--muted)">Guest ${i + 1}</div>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="removeGuestFromSignup('${mine.id}', '${eventId}', ${i})">Remove</button>
+    </div>`;
+  });
+
+  listEl.innerHTML = html;
+  openModal('manageGroupModal');
+}
+
+async function removeGuestFromSignup(regId, eventId, guestIndex) {
+  if (!confirm('Remove this guest from the event?')) return;
+  const allRegs = regsCache[eventId] || [];
+  const reg = allRegs.find(r => r.id === regId);
+  if (!reg) return;
+
+  const newGuests = (reg.guests || []).filter((_, i) => i !== guestIndex);
+  await setDoc(doc(db, 'registrations', regId), { guests: newGuests }, { merge: true });
+
+  // One spot freed — check waitlist
+  await promoteFromWaitlist(eventId);
+
+  showToast('Guest removed.');
+  // Refresh the modal with updated data
+  openManageGroup(eventId);
+}
+
+async function cancelSelfFromGroup(eventId) {
+  if (!currentUser) return;
+  const allRegs = regsCache[eventId] || [];
+  const mine = allRegs.find(r => r.uid === currentUser.uid && !r.waitlisted);
+  if (!mine) return;
+
+  const guestNames = (mine.guests || []).map(g => g.name).join(', ');
+  const msg = mine.guests?.length
+    ? `Cancel your spot? This will also remove your guests (${guestNames}). The waitlist will be moved up.`
+    : 'Cancel your spot? The next person on the waitlist will be moved up.';
+  if (!confirm(msg)) return;
+
+  closeModal('manageGroupModal');
+  await deleteDoc(doc(db, 'registrations', mine.id));
+  const spotsFreed = 1 + (mine.guests?.length || 0);
+  await promoteFromWaitlist(eventId, spotsFreed);
+  showToast('Your spot has been cancelled.');
+}
+
+async function promoteFromWaitlist(eventId, spotsCount = 1) {
+  const allRegs = regsCache[eventId] || [];
+  const waitlist = allRegs
+    .filter(r => r.waitlisted)
+    .sort((a, b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
+  const toPromote = waitlist.slice(0, spotsCount);
+  for (const w of toPromote) {
+    await setDoc(doc(db, 'registrations', w.id), { waitlisted: false }, { merge: true });
+  }
+}
+
 async function cancelSignup(eventId) {
   if (!currentUser) return;
   const allRegs = regsCache[eventId] || [];
@@ -1407,15 +1495,9 @@ async function cancelSignup(eventId) {
 
   await deleteDoc(doc(db, 'registrations', mine.id));
 
-  // If they had a main spot, promote the first waitlisted person
   if (wasMain) {
-    const waitlist = allRegs
-      .filter(r => r.waitlisted && r.uid !== currentUser.uid)
-      .sort((a, b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
-    if (waitlist.length > 0) {
-      const first = waitlist[0];
-      await setDoc(doc(db, 'registrations', first.id), { waitlisted: false }, { merge: true });
-    }
+    const spotsFreed = 1 + (mine.guests?.length || 0);
+    await promoteFromWaitlist(eventId, spotsFreed);
     showToast('Spot cancelled. Next waitlisted player has been moved up.');
   } else {
     showToast('You have been removed from the waitlist.');
@@ -1537,20 +1619,16 @@ function renderRoster() {
 
 async function adminRemove(regId, eventId, isWaitlisted) {
   if (!confirm('Remove this person?')) return;
+  const allRegs = regsCache[eventId] || [];
+  const reg = allRegs.find(r => r.id === regId);
   await deleteDoc(doc(db, 'registrations', regId));
-  // If removing a main-list person, promote the first waitlisted
   if (!isWaitlisted && eventId) {
-    const allRegs = regsCache[eventId] || [];
-    const waitlist = allRegs
-      .filter(r => r.waitlisted && r.id !== regId)
-      .sort((a, b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
-    if (waitlist.length > 0) {
-      await setDoc(doc(db, 'registrations', waitlist[0].id), { waitlisted: false }, { merge: true });
-      showToast('Removed. Next waitlisted player has been moved up.');
-      return;
-    }
+    const spotsFreed = 1 + (reg?.guests?.length || 0);
+    await promoteFromWaitlist(eventId, spotsFreed);
+    showToast('Removed. Waitlist updated.');
+  } else {
+    showToast('Removed.');
   }
-  showToast('Removed.');
 }
 
 async function openPlayerProfile(uid) {
@@ -1882,6 +1960,7 @@ function unlockWaiverCheckbox() {
 Object.assign(window, {
   login, login2, register, register2, googleSignIn, logout,
   addEvent, deleteEvent, openEventSignup, confirmSignup, cancelSignup,
+  openManageGroup, removeGuestFromSignup, cancelSelfFromGroup,
   addGuestRow, removeGuestRow, selectPayment,
   renderRoster, adminRemove, showPage, openModal, closeModal,
   switchAuthTab, switchAuthTab2, switchAdminTab, openPlayerProfile,
@@ -1890,6 +1969,17 @@ Object.assign(window, {
   openWaiverModal, unlockWaiverCheckbox
 });
 </script>
+
+
+<!-- ======================== MANAGE GROUP MODAL ======================== -->
+<div class="modal-overlay" id="manageGroupModal">
+  <div class="modal" style="position:relative">
+    <button class="modal-close" onclick="closeModal('manageGroupModal')">✕</button>
+    <h2 id="mgm-title">Manage Your Group</h2>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:20px">Remove individual guests without cancelling the whole group.</p>
+    <div id="mgm-list"></div>
+  </div>
+</div>
 
 <!-- ======================== PLAYER PROFILE MODAL ======================== -->
 <div class="modal-overlay" id="playerProfileModal">
