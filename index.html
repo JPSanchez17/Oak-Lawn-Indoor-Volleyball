@@ -951,9 +951,9 @@
         <input type="checkbox" id="checkAge" style="margin-top:3px;accent-color:var(--fire);width:16px;height:16px;flex-shrink:0">
         <span style="font-size:13px;color:var(--muted);line-height:1.5">I certify that I am at least 18 years old, or I am the parent/legal guardian of any participant under 18 included in this registration.</span>
       </label>
-      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
-        <input type="checkbox" id="checkWaiver" style="margin-top:3px;accent-color:var(--fire);width:16px;height:16px;flex-shrink:0">
-        <span style="font-size:13px;color:var(--muted);line-height:1.5">I have read and agree to the <a href="#" onclick="openModal('waiverModal');return false;" style="color:var(--sky);text-decoration:underline">Terms and Conditions &amp; Liability Waiver</a>.</span>
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer" id="waiverCheckLabel">
+        <input type="checkbox" id="checkWaiver" disabled style="margin-top:3px;accent-color:var(--fire);width:16px;height:16px;flex-shrink:0;opacity:0.4;cursor:not-allowed">
+        <span style="font-size:13px;color:var(--muted);line-height:1.5">I have read and agree to the <a href="#" onclick="openWaiverModal();return false;" style="color:var(--sky);text-decoration:underline">Terms and Conditions &amp; Liability Waiver</a><span style="color:var(--fire)">*</span>.</span>
       </label>
     </div>
 
@@ -1250,6 +1250,11 @@ function openEventSignup(eventId) {
   document.getElementById('payOptVenmo').classList.remove('selected');
   document.getElementById('checkAge').checked = false;
   document.getElementById('checkWaiver').checked = false;
+  document.getElementById('checkWaiver').disabled = true;
+  document.getElementById('checkWaiver').style.opacity = '0.4';
+  document.getElementById('checkWaiver').style.cursor = 'not-allowed';
+  const wrc = document.getElementById('waiverReadCheckbox');
+  if (wrc) wrc.checked = false;
 
   openModal('eventSignupModal');
 }
@@ -1749,6 +1754,20 @@ async function renderBulletin() {
 
   login, login2, register, register2, googleSignIn, logout,
   addEvent, deleteEvent, openEventSignup, confirmSignup, cancelSignup,
+function openWaiverModal() {
+  openModal('waiverModal');
+}
+
+function unlockWaiverCheckbox() {
+  const cb = document.getElementById('checkWaiver');
+  if (!cb) return;
+  cb.disabled = false;
+  cb.style.opacity = '1';
+  cb.style.cursor = 'pointer';
+  const hint = document.getElementById('waiverHint');
+  if (hint) hint.style.display = 'none';
+}
+
 Object.assign(window, {
   login, login2, register, register2, googleSignIn, logout,
   addEvent, deleteEvent, openEventSignup, confirmSignup, cancelSignup,
@@ -1756,7 +1775,8 @@ Object.assign(window, {
   renderRoster, adminRemove, showPage, openModal, closeModal,
   switchAuthTab, switchAuthTab2, switchAdminTab, openPlayerProfile,
   saveProfile, handleAvatarUpload, populateRosterSelect,
-  openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin
+  openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
+  openWaiverModal, unlockWaiverCheckbox
 });
 </script>
 
@@ -1777,7 +1797,6 @@ Object.assign(window, {
 <div class="modal-overlay" id="waiverModal">
   <div class="modal" style="max-width:680px;position:relative">
     <button class="modal-close" onclick="closeModal('waiverModal')">✕</button>
-    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:24px;color:var(--gold);text-transform:uppercase;margin-bottom:16px">Terms and Conditions &amp; Liability Waiver</div>
     <div style="max-height:60vh;overflow-y:auto;padding-right:8px;font-size:13px;color:var(--muted);line-height:1.7">
       <p style="margin-bottom:12px">By registering for or participating in any activity, event, league, practice, open gym, training session, or use of facilities operated by Oak Lawn Indoor Volleyball ("OLIV"), the individual completing this registration ("Registrant") acknowledges and agrees that this waiver applies to both the Registrant and any additional participants or guests listed or registered by the Registrant (collectively, the "Participants"). The Registrant represents that they have the authority to agree to these terms on behalf of all Participants they register.</p>
 
@@ -1811,7 +1830,10 @@ Object.assign(window, {
       <div style="font-weight:700;color:var(--text);margin-bottom:6px">Acknowledgment</div>
       <p>By submitting this registration, the Registrant confirms that they have read, understood, and voluntarily agree to these Terms and Conditions and Liability Waiver on behalf of themselves and all Participants included in the registration.</p>
     </div>
-    <button class="btn btn-primary btn-full" style="margin-top:20px" onclick="closeModal('waiverModal')">Close</button>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:20px;padding:14px;background:rgba(255,255,255,.04);border:1.5px solid var(--border);border-radius:8px">
+      <input type="checkbox" id="waiverReadCheckbox" style="accent-color:var(--fire);width:18px;height:18px;flex-shrink:0" onclick="if(this.checked){closeModal('waiverModal');unlockWaiverCheckbox();}">
+      <span style="font-size:14px;color:var(--text);font-weight:600">I have read and understand the waiver</span>
+    </label>
   </div>
 </div>
 
