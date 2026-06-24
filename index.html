@@ -720,7 +720,7 @@
     <button class="nav-btn active" onclick="showPage('home')">Home</button>
     <button class="nav-btn" onclick="showPage('rules')">Rules</button>
     <button class="nav-btn" onclick="showPage('schedule')">Schedule</button>
-    <button class="nav-btn" id="rosterNavBtn" onclick="showPage('roster')" style="display:none">Player List</button>
+    <button class="nav-btn" id="rosterNavBtn" onclick="showPage('roster')">Player List</button>
     <button class="nav-btn" onclick="showPage('bulletin')">League Board</button>
     <button class="nav-btn" id="messagesNavBtn" onclick="showPage('messages')" style="display:none">Messages<span id="msgNavBadge" class="msg-badge-dot" style="display:none"></span></button>
     <button class="nav-btn" id="adminNavBtn" onclick="showPage('admin')" style="display:none">Admin</button>
@@ -1408,7 +1408,6 @@ onAuthStateChanged(auth, async (user) => {
       <button class="btn btn-outline btn-sm" onclick="openModal('loginModal')">Log In</button>
       <button class="btn btn-primary btn-sm" onclick="openModal('signupModal')">Sign Up</button>`;
     document.getElementById('adminNavBtn').style.display = 'none';
-    document.getElementById('rosterNavBtn').style.display = 'none';
     document.getElementById('messagesNavBtn').style.display = 'none';
     friendsCache = []; friendUidSet = new Set(); incomingRequests = []; outgoingRequests = [];
     conversationsCache = []; currentChatUid = null;
@@ -2618,7 +2617,7 @@ function restorePageFromHash() {
   const name = window.location.hash.slice(1);
   if (!VALID_PAGES.includes(name) || name === 'home') return;
   // Pages that need a signed-in user fall back to home if not logged in yet
-  if ((name === 'roster' || name === 'profile' || name === 'messages') && !currentUser) return;
+  if ((name === 'profile' || name === 'messages') && !currentUser) return;
   if (name === 'admin' && !(currentUser && currentUser.isAdmin)) return;
   showPage(name);
 }
