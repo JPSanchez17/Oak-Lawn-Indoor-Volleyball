@@ -762,7 +762,7 @@
       <div class="card">
         <div class="rule-num">2</div>
         <h3>Sign-Up and RSVP Changes</h3>
-        <p>Sign-ups will be reviewed and filtered to maintain the intended skill level of the runs.</p>
+        <p>There is <strong>no paid RSVP system</strong> for intermediate open gyms. Sign-ups will be reviewed and filtered to maintain the intended skill level of the runs.</p>
         <p style="margin-top:10px">The goal is to create competitive and enjoyable games for upper B level and higher players, and we do not mean any disrespect to anyone who may not yet be ready for this level of play. Being approved for one session does not guarantee approval for future sessions. Hosts may make decisions based on both their own observations and feedback from other players regarding whether someone is currently ready for intermediate level runs.</p>
       </div>
 
@@ -1187,6 +1187,7 @@ let regsCache = {};
 let selectedEventId = null;
 let selectedPayment = null;
 let guestCount = 0;
+let currentManageGroupEventId = null;
 
 // ======================== TOAST ========================
 function showToast(msg, isError = false) {
@@ -1314,6 +1315,10 @@ onSnapshot(collection(db, 'registrations'), (snap) => {
   renderSchedule();
   if (currentUser?.isAdmin) renderAdminEvents();
   renderRoster();
+  const openGroupModal = document.getElementById('manageGroupModal');
+  if (openGroupModal && openGroupModal.classList.contains('open') && currentManageGroupEventId) {
+    openManageGroup(currentManageGroupEventId);
+  }
 }, (err) => console.error('registrations listener error', err));
 
 async function addEvent() {
@@ -1583,6 +1588,7 @@ function openManageGroup(eventId) {
   const mine = allRegs.find(r => r.uid === currentUser.uid && !r.waitlisted);
   if (!mine) return;
 
+  currentManageGroupEventId = eventId;
   const ev = eventsCache.find(e => e.id === eventId);
   const modal = document.getElementById('manageGroupModal');
   document.getElementById('mgm-title').textContent = ev ? ev.name : 'Your Group';
@@ -2031,9 +2037,12 @@ function showPage(name) {
 
 // ======================== MODALS ========================
 function openModal(id) { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  if (id === 'manageGroupModal') currentManageGroupEventId = null;
+}
 document.querySelectorAll('.modal-overlay').forEach(m => {
-  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+  m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
 });
 
 function switchAuthTab(tab) {
