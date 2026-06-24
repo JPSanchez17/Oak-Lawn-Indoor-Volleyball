@@ -565,6 +565,21 @@
     letter-spacing: .4px;
     margin-right: 8px;
   }
+  .waitlist-badge {
+    background: rgba(255,193,7,.15);
+    color: var(--gold);
+    border: 1px solid rgba(255,193,7,.3);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+  }
+
+  .btn-waitlist { background: linear-gradient(135deg, #8B5E00, var(--gold)); color: #000; }
+  .btn-waitlist:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(255,193,7,.4); }
+
   .bb-tag-lft  { background: rgba(91,111,212,.2); color: var(--sky); }
   .bb-tag-lfp  { background: rgba(255,98,0,.15); color: var(--fire); }
   .bb-tag-sub  { background: rgba(34,197,94,.15); color: var(--success); }
@@ -958,7 +973,7 @@
     </div>
 
     <div style="margin-top:16px" id="confirmSection" style="display:none">
-      <button class="btn btn-primary btn-full" onclick="confirmSignup()">✅ Confirm My Spot</button>
+      <button class="btn btn-primary btn-full" id="confirmBtn" onclick="confirmSignup()">✅ Confirm My Spot</button>
       <p style="font-size:12px;color:var(--muted);margin-top:10px;text-align:center">Contact Jude at (708) 953-6658 with any payment issues.</p>
     </div>
   </div>
@@ -1186,18 +1201,26 @@ function renderSchedule() {
       const month = d.toLocaleString('default', { month: 'short' }).toUpperCase();
       const day = d.getDate();
       const evRegs = regsCache[ev.id] || [];
-      const taken = evRegs.reduce((sum, r) => sum + 1 + (r.guests?.length || 0), 0);
+      const mainRegs = evRegs.filter(r => !r.waitlisted);
+      const waitRegs = evRegs.filter(r => r.waitlisted).sort((a,b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
+      const taken = mainRegs.reduce((sum, r) => sum + 1 + (r.guests?.length || 0), 0);
       const pct = Math.round((taken / ev.spots) * 100);
       const full = taken >= ev.spots;
-      const mySignup = currentUser && evRegs.find(r => r.uid === currentUser.uid);
+      const myMainSignup = currentUser && mainRegs.find(r => r.uid === currentUser.uid);
+      const myWaitlist = currentUser && waitRegs.find(r => r.uid === currentUser.uid);
+      const waitPos = myWaitlist ? waitRegs.indexOf(myWaitlist) + 1 : 0;
+      const waitCount = waitRegs.length;
 
       let actionBtn = '';
-      if (mySignup) {
-        const guestLabel = mySignup.guests?.length ? ` +${mySignup.guests.length} guest${mySignup.guests.length > 1 ? 's' : ''}` : '';
+      if (myMainSignup) {
+        const guestLabel = myMainSignup.guests?.length ? ` +${myMainSignup.guests.length} guest${myMainSignup.guests.length > 1 ? 's' : ''}` : '';
         actionBtn = `<span style="color:var(--success);font-weight:700;font-size:14px">✅ Signed Up${guestLabel}</span>
                      <button class="btn btn-outline btn-sm" onclick="cancelSignup('${ev.id}')">Cancel</button>`;
+      } else if (myWaitlist) {
+        actionBtn = `<span class="waitlist-badge">⏳ Waitlist #${waitPos}</span>
+                     <button class="btn btn-outline btn-sm" style="margin-top:4px" onclick="cancelSignup('${ev.id}')">Leave Waitlist</button>`;
       } else if (full) {
-        actionBtn = `<span style="color:var(--danger);font-size:14px;font-weight:600">FULL</span>`;
+        actionBtn = `<button class="btn btn-waitlist btn-sm" onclick="openEventSignup('${ev.id}')">Join Waitlist${waitCount > 0 ? ` (${waitCount} waiting)` : ''}</button>`;
       } else {
         actionBtn = `<button class="btn btn-primary btn-sm" onclick="openEventSignup('${ev.id}')">Sign Up — $${ev.cost}</button>`;
       }
@@ -1211,7 +1234,7 @@ function renderSchedule() {
             <div class="event-meta">
               <span>🕐 ${ev.time}</span>
               <span>📍 ${ev.location}</span>
-              <span>👥 ${taken}/${ev.spots} spots</span>
+              <span>👥 ${taken}/${ev.spots} spots${waitCount > 0 ? ` · ⏳ ${waitCount} waitlisted` : ''}</span>
             </div>
             <div class="spots-bar"><div class="spots-fill" style="width:${Math.min(pct,100)}%"></div></div>
           </div>
@@ -1239,13 +1262,19 @@ function openEventSignup(eventId) {
   selectedPayment = null;
   guestCount = 0;
 
-  document.getElementById('esm-title').textContent = ev.name;
+  const evRegsNow = regsCache[eventId] || [];
+  const mainRegsNow = evRegsNow.filter(r => !r.waitlisted);
+  const takenNow = mainRegsNow.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+  const isFullNow = takenNow >= ev.spots;
+  document.getElementById('esm-title').textContent = isFullNow ? `${ev.name} — Waitlist` : ev.name;
   document.getElementById('esm-price').textContent = `$${Number(ev.cost).toFixed(2)}`;
   document.getElementById('esm-total-line').textContent = '';
   document.getElementById('guestRows').innerHTML = '';
   document.getElementById('cashInstructions').classList.remove('show');
   document.getElementById('venmoInstructions').classList.remove('show');
   document.getElementById('confirmSection').style.display = 'none';
+  const confirmBtn = document.getElementById('confirmBtn');
+  if (confirmBtn) confirmBtn.textContent = isFullNow ? '⏳ Join Waitlist' : '✅ Confirm My Spot';
   document.getElementById('payOptCash').classList.remove('selected');
   document.getElementById('payOptVenmo').classList.remove('selected');
   document.getElementById('checkAge').checked = false;
@@ -1259,8 +1288,9 @@ function openEventSignup(eventId) {
 
 function addGuestRow() {
   const ev = eventsCache.find(e => e.id === selectedEventId);
-  const taken = (regsCache[selectedEventId] || []).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+  const taken = (regsCache[selectedEventId] || []).filter(r => !r.waitlisted).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
   const available = ev ? ev.spots - taken : 0;
+  if (available <= 0) return showToast('This event is full — waitlist is for one person only.', true);
   if (guestCount >= available - 1) return showToast('Not enough spots for more guests.', true);
 
   guestCount++;
@@ -1324,7 +1354,29 @@ async function confirmSignup() {
     guests.push({ name });
   }
 
-  const taken = existing.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+  const mainExisting = existing.filter(r => !r.waitlisted);
+  const taken = mainExisting.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+  const isFull = taken >= ev.spots;
+
+  // If full, add to waitlist (guests not supported on waitlist)
+  if (isFull) {
+    if (guests.length > 0) { showToast('Waitlist sign-ups are for one person only — no guests.', true); return; }
+    await addDoc(collection(db, 'registrations'), {
+      eventId: selectedEventId,
+      uid: currentUser.uid,
+      email: currentUser.email,
+      name: `${currentUser.firstName} ${currentUser.lastName}`,
+      phone: currentUser.phone || '',
+      paymentMethod: selectedPayment,
+      guests: [],
+      waitlisted: true,
+      signedUpAt: serverTimestamp()
+    });
+    closeModal('eventSignupModal');
+    showToast(`Added to the waitlist! We'll move you up if a spot opens. 🏐`);
+    return;
+  }
+
   if (taken + 1 + guests.length > ev.spots) { showToast('Sorry, not enough spots available.', true); return; }
 
   await addDoc(collection(db, 'registrations'), {
@@ -1335,6 +1387,7 @@ async function confirmSignup() {
     phone: currentUser.phone || '',
     paymentMethod: selectedPayment,
     guests,
+    waitlisted: false,
     signedUpAt: serverTimestamp()
   });
 
@@ -1344,10 +1397,29 @@ async function confirmSignup() {
 
 async function cancelSignup(eventId) {
   if (!currentUser) return;
-  if (!confirm('Cancel your spot?')) return;
-  const mine = (regsCache[eventId] || []).find(r => r.uid === currentUser.uid);
-  if (mine) await deleteDoc(doc(db, 'registrations', mine.id));
-  showToast('Your spot has been cancelled.');
+  const allRegs = regsCache[eventId] || [];
+  const mine = allRegs.find(r => r.uid === currentUser.uid);
+  if (!mine) return;
+
+  const wasMain = !mine.waitlisted;
+  const confirmMsg = wasMain ? 'Cancel your spot? The next person on the waitlist will be moved up.' : 'Leave the waitlist?';
+  if (!confirm(confirmMsg)) return;
+
+  await deleteDoc(doc(db, 'registrations', mine.id));
+
+  // If they had a main spot, promote the first waitlisted person
+  if (wasMain) {
+    const waitlist = allRegs
+      .filter(r => r.waitlisted && r.uid !== currentUser.uid)
+      .sort((a, b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
+    if (waitlist.length > 0) {
+      const first = waitlist[0];
+      await setDoc(doc(db, 'registrations', first.id), { waitlisted: false }, { merge: true });
+    }
+    showToast('Spot cancelled. Next waitlisted player has been moved up.');
+  } else {
+    showToast('You have been removed from the waitlist.');
+  }
 }
 
 // ======================== ROSTER ========================
@@ -1370,53 +1442,84 @@ function renderRoster() {
   const el = document.getElementById('rosterContent');
   if (!eventId) { el.innerHTML = ''; return; }
 
-  const evRegs = (regsCache[eventId] || []).slice().sort((a,b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
+  const allRegs = (regsCache[eventId] || []).slice().sort((a,b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
+  const mainRegs = allRegs.filter(r => !r.waitlisted);
+  const waitRegs = allRegs.filter(r => r.waitlisted);
   const ev = eventsCache.find(e => e.id === eventId);
-  const totalSpots = evRegs.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+  const totalSpots = mainRegs.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
 
-  if (!evRegs.length) {
+  if (!allRegs.length) {
     el.innerHTML = `<div class="empty"><div class="empty-icon">🏐</div><p>Nobody signed up yet for this session.</p></div>`;
     return;
   }
 
   const isAdmin = currentUser?.isAdmin;
 
-  let rows = '';
-  let num = 1;
-  for (const r of evRegs) {
-    const payBadge = r.paymentMethod === 'cash'
-      ? '<span style="background:rgba(34,197,94,.15);color:var(--success);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">💵 Cash</span>'
-      : r.paymentMethod === 'venmo'
-      ? '<span style="background:rgba(91,111,212,.15);color:var(--sky);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">📱 Venmo/Zelle</span>'
-      : '';
+  function buildRows(regs) {
+    let rows = '';
+    let num = 1;
+    for (const r of regs) {
+      const payBadge = r.paymentMethod === 'cash'
+        ? '<span style="background:rgba(34,197,94,.15);color:var(--success);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">💵 Cash</span>'
+        : r.paymentMethod === 'venmo'
+        ? '<span style="background:rgba(91,111,212,.15);color:var(--sky);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">📱 Venmo/Zelle</span>'
+        : '';
 
-    rows += `<tr>
-      <td style="color:var(--muted)">${num++}</td>
-      <td><strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${r.name}</strong></td>
-      ${isAdmin ? `<td style="color:var(--muted)">${r.email}</td>` : ''}
-      ${isAdmin ? `<td style="color:var(--muted)">${r.phone || '—'}</td>` : ''}
-      ${isAdmin ? `<td>${payBadge}</td>` : ''}
-      <td style="color:var(--muted);font-size:13px">${r.signedUpAt?.toDate ? r.signedUpAt.toDate().toLocaleDateString() : ''}</td>
-      ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemove('${r.id}')">Remove</button></td>` : ''}
-    </tr>`;
-
-    for (const g of (r.guests || [])) {
-      rows += `<tr style="background:rgba(255,255,255,.01)">
+      rows += `<tr>
         <td style="color:var(--muted)">${num++}</td>
-        <td style="color:var(--muted);padding-left:28px">↳ ${g.name} <span style="font-size:11px;opacity:.6">(guest)</span></td>
-        ${isAdmin ? '<td></td>' : ''}
-        ${isAdmin ? '<td></td>' : ''}
-        ${isAdmin ? '<td></td>' : ''}
-        <td></td>
-        ${isAdmin ? '<td></td>' : ''}
+        <td><strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${r.name}</strong></td>
+        ${isAdmin ? `<td style="color:var(--muted)">${r.email}</td>` : ''}
+        ${isAdmin ? `<td style="color:var(--muted)">${r.phone || '—'}</td>` : ''}
+        ${isAdmin ? `<td>${payBadge}</td>` : ''}
+        <td style="color:var(--muted);font-size:13px">${r.signedUpAt?.toDate ? r.signedUpAt.toDate().toLocaleDateString() : ''}</td>
+        ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemove('${r.id}', '${eventId}', ${r.waitlisted ? 'true' : 'false'})">Remove</button></td>` : ''}
       </tr>`;
+
+      for (const g of (r.guests || [])) {
+        rows += `<tr style="background:rgba(255,255,255,.01)">
+          <td style="color:var(--muted)">${num++}</td>
+          <td style="color:var(--muted);padding-left:28px">↳ ${g.name} <span style="font-size:11px;opacity:.6">(guest)</span></td>
+          ${isAdmin ? '<td></td>' : ''}
+          ${isAdmin ? '<td></td>' : ''}
+          ${isAdmin ? '<td></td>' : ''}
+          <td></td>
+          ${isAdmin ? '<td></td>' : ''}
+        </tr>`;
+      }
     }
+    return rows;
+  }
+
+  const mainRows = buildRows(mainRegs);
+
+  let waitlistSection = '';
+  if (waitRegs.length > 0) {
+    const waitRows = buildRows(waitRegs);
+    waitlistSection = `
+    <div class="card" style="padding:0;overflow:hidden;margin-top:16px;border-color:rgba(255,193,7,.3)">
+      <div style="padding:14px 20px;border-bottom:1px solid var(--border);background:rgba(255,193,7,.06);display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:700;color:var(--gold)">⏳ Waitlist (${waitRegs.length})</span>
+        <span style="font-size:13px;color:var(--muted)">In order — first up when a spot opens</span>
+      </div>
+      <table class="roster-table">
+        <thead><tr>
+          <th>#</th><th>Name</th>
+          ${isAdmin ? '<th>Email</th>' : ''}
+          ${isAdmin ? '<th>Phone</th>' : ''}
+          ${isAdmin ? '<th>Payment</th>' : ''}
+          <th>Joined</th>
+          ${isAdmin ? '<th>Action</th>' : ''}
+        </tr></thead>
+        <tbody>${waitRows}</tbody>
+      </table>
+    </div>`;
   }
 
   el.innerHTML = `
     <div class="card" style="padding:0;overflow:hidden">
       <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
         <span style="font-weight:600">${totalSpots} / ${ev ? ev.spots : '?'} spots filled</span>
+        ${waitRegs.length > 0 ? `<span class="waitlist-badge">⏳ ${waitRegs.length} on waitlist</span>` : ''}
       </div>
       <table class="roster-table">
         <thead><tr>
@@ -1427,14 +1530,26 @@ function renderRoster() {
           <th>Signed Up</th>
           ${isAdmin ? '<th>Action</th>' : ''}
         </tr></thead>
-        <tbody>${rows}</tbody>
+        <tbody>${mainRows}</tbody>
       </table>
-    </div>`;
+    </div>${waitlistSection}`;
 }
 
-async function adminRemove(regId) {
+async function adminRemove(regId, eventId, isWaitlisted) {
   if (!confirm('Remove this person?')) return;
   await deleteDoc(doc(db, 'registrations', regId));
+  // If removing a main-list person, promote the first waitlisted
+  if (!isWaitlisted && eventId) {
+    const allRegs = regsCache[eventId] || [];
+    const waitlist = allRegs
+      .filter(r => r.waitlisted && r.id !== regId)
+      .sort((a, b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
+    if (waitlist.length > 0) {
+      await setDoc(doc(db, 'registrations', waitlist[0].id), { waitlisted: false }, { merge: true });
+      showToast('Removed. Next waitlisted player has been moved up.');
+      return;
+    }
+  }
   showToast('Removed.');
 }
 
@@ -1607,13 +1722,16 @@ function renderAdminEvents() {
     el.innerHTML = eventsCache.map(ev => {
       const d = new Date(ev.date + 'T12:00:00');
       const evRegs = regsCache[ev.id] || [];
-      const taken = evRegs.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+      const evMainRegs = evRegs.filter(r => !r.waitlisted);
+      const evWaitRegs = evRegs.filter(r => r.waitlisted);
+      const taken = evMainRegs.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+      const waitInfo = evWaitRegs.length > 0 ? ` · <span style="color:var(--gold)">⏳ ${evWaitRegs.length} on waitlist</span>` : '';
       return `
       <div class="card" style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center">
         <div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700">${ev.name}</div>
           <div style="color:var(--muted);font-size:14px;margin-top:4px">${d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · ${ev.time} · ${ev.location}</div>
-          <div style="color:var(--gold);font-size:14px;margin-top:4px">👥 ${taken}/${ev.spots} signed up · $${ev.cost} each</div>
+          <div style="color:var(--gold);font-size:14px;margin-top:4px">👥 ${taken}/${ev.spots} signed up · $${ev.cost} each${waitInfo}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <button class="btn btn-outline btn-sm" onclick="showPage('roster');populateRosterSelect();document.getElementById('rosterSelect').value='${ev.id}';renderRoster()">View Roster</button>
