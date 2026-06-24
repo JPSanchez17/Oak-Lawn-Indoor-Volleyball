@@ -482,6 +482,50 @@
   .empty { text-align: center; padding: 48px 24px; color: var(--muted); }
   .empty-icon { font-size: 48px; margin-bottom: 12px; }
 
+  /* ===== FRIENDS / MESSAGES ===== */
+  .msg-layout { display: grid; grid-template-columns: 280px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 720px) { .msg-layout { grid-template-columns: 1fr; } }
+
+  .msg-sidebar { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .msg-sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .msg-sidebar-tab {
+    flex: 1; background: none; border: none; color: var(--muted); font-family: 'Barlow', sans-serif;
+    font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .5px;
+    padding: 12px 8px; cursor: pointer; position: relative;
+  }
+  .msg-sidebar-tab.active { color: var(--gold); background: rgba(255,193,7,.06); }
+  .msg-sidebar-list { max-height: 520px; overflow-y: auto; }
+
+  .msg-row {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.04); transition: background .15s;
+  }
+  .msg-row:hover, .msg-row.active { background: rgba(255,255,255,.04); }
+  .msg-avatar {
+    width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0; object-fit: cover;
+    background: linear-gradient(135deg, var(--court), var(--navy)); display: flex; align-items: center;
+    justify-content: center; font-size: 16px; border: 1.5px solid var(--border);
+  }
+  .msg-row-name { font-weight: 600; font-size: 14px; color: var(--text); }
+  .msg-row-preview { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
+  .msg-row-actions { display: flex; gap: 6px; margin-left: auto; }
+
+  .msg-chat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; height: 600px; }
+  .msg-chat-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .msg-chat-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .msg-bubble { max-width: 75%; padding: 9px 14px; border-radius: 14px; font-size: 14px; line-height: 1.4; word-wrap: break-word; }
+  .msg-bubble.mine { align-self: flex-end; background: linear-gradient(135deg, var(--fire), var(--gold)); color: #000; border-bottom-right-radius: 4px; }
+  .msg-bubble.theirs { align-self: flex-start; background: rgba(255,255,255,.06); color: var(--text); border-bottom-left-radius: 4px; }
+  .msg-chat-input { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); }
+  .msg-chat-input input {
+    flex: 1; background: var(--bg); border: 1.5px solid var(--border); color: var(--text);
+    padding: 10px 14px; border-radius: 100px; font-family: 'Barlow', sans-serif; font-size: 14px;
+  }
+  .msg-badge-dot {
+    background: var(--danger); color: #fff; font-size: 11px; font-weight: 700;
+    border-radius: 100px; padding: 1px 6px; margin-left: 5px;
+  }
+
   .add-event-panel {
     background: var(--card);
     border: 1px solid var(--border);
@@ -639,6 +683,7 @@
     <button class="nav-btn" onclick="showPage('rules')">Rules</button>
     <button class="nav-btn" onclick="showPage('schedule')">Schedule</button>
     <button class="nav-btn" id="rosterNavBtn" onclick="showPage('roster')" style="display:none">Roster</button>
+    <button class="nav-btn" id="messagesNavBtn" onclick="showPage('messages')" style="display:none">💬 Messages<span id="msgNavBadge" class="msg-badge-dot" style="display:none"></span></button>
     <button class="nav-btn" onclick="showPage('bulletin')">🏆 League Board</button>
     <button class="nav-btn" id="adminNavBtn" onclick="showPage('admin')" style="display:none">Admin</button>
   </div>
@@ -878,6 +923,34 @@
       <option value="">Select an event...</option>
     </select>
     <div id="rosterContent"></div>
+  </div>
+</div>
+
+<!-- ======================== MESSAGES / FRIENDS PAGE ======================== -->
+<div class="page" id="page-messages">
+  <div class="container" style="max-width:1100px">
+    <div class="section-title">Friends &amp; Messages</div>
+    <div class="section-sub">Add other players as friends, then send them private messages.</div>
+
+    <div class="msg-layout">
+      <div class="msg-sidebar">
+        <div class="msg-sidebar-tabs">
+          <button class="msg-sidebar-tab active" id="msgTab-chats" onclick="switchMsgTab('chats')">Chats</button>
+          <button class="msg-sidebar-tab" id="msgTab-friends" onclick="switchMsgTab('friends')">Friends</button>
+          <button class="msg-sidebar-tab" id="msgTab-requests" onclick="switchMsgTab('requests')">Requests<span id="reqTabBadge" class="msg-badge-dot" style="display:none"></span></button>
+        </div>
+        <div class="msg-sidebar-list" id="msgSidebarList">
+          <div style="color:var(--muted);padding:16px;font-size:14px">Loading...</div>
+        </div>
+      </div>
+
+      <div class="msg-chat" id="msgChatPanel">
+        <div class="empty" style="margin:auto">
+          <div class="empty-icon">💬</div>
+          <p>Pick a friend on the left to start chatting.</p>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1189,6 +1262,17 @@ let selectedPayment = null;
 let guestCount = 0;
 let currentManageGroupEventId = null;
 
+// ======================== FRIENDS / MESSAGES STATE ========================
+let friendsCache = [];           // [{uid, firstName, lastName, avatarUrl}]
+let friendUidSet = new Set();
+let incomingRequests = [];        // [{id, from, createdAt}]
+let outgoingRequests = [];        // [{id, to, createdAt}]
+let conversationsCache = [];      // [{id, participants, lastMessage, lastMessageAt, lastRead}]
+let profilesCache = {};           // uid -> {firstName,lastName,avatarUrl}
+let currentMsgTab = 'chats';
+let currentChatUid = null;
+let unsubMessages = null;
+
 // ======================== TOAST ========================
 function showToast(msg, isError = false) {
   const t = document.getElementById('toast');
@@ -1285,6 +1369,10 @@ onAuthStateChanged(auth, async (user) => {
       <button class="btn btn-primary btn-sm" onclick="openModal('signupModal')">Sign Up</button>`;
     document.getElementById('adminNavBtn').style.display = 'none';
     document.getElementById('rosterNavBtn').style.display = 'none';
+    document.getElementById('messagesNavBtn').style.display = 'none';
+    friendsCache = []; friendUidSet = new Set(); incomingRequests = []; outgoingRequests = [];
+    conversationsCache = []; currentChatUid = null;
+    if (unsubMessages) { unsubMessages(); unsubMessages = null; }
     renderSchedule();
     restorePageFromHash();
   }
@@ -1302,10 +1390,12 @@ function afterLogin() {
     <button class="btn btn-outline btn-sm" onclick="logout()">Log Out</button>`;
 
   document.getElementById('rosterNavBtn').style.display = '';
+  document.getElementById('messagesNavBtn').style.display = '';
   document.getElementById('adminNavBtn').style.display = currentUser.isAdmin ? '' : 'none';
   if (currentUser.isAdmin) renderAdminEvents();
   renderSchedule();
   populateRosterSelect();
+  startFriendsAndMessagesListeners();
 }
 
 // ======================== EVENTS LIVE ========================
@@ -1886,10 +1976,347 @@ async function openPlayerProfile(uid) {
     bioEl.textContent = p.bio || 'No bio yet.';
     bioEl.style.display = p.bio ? '' : 'none';
 
+    profilesCache[uid] = { firstName: p.firstName || '', lastName: p.lastName || '', avatarUrl: p.avatarUrl || '' };
+    renderFriendActionButtons(uid);
+
     openModal('playerProfileModal');
   } catch (e) {
     showToast('Could not load profile.', true);
   }
+}
+
+// ======================== FRIENDS ========================
+function convoIdFor(a, b) { return [a, b].sort().join('_'); }
+
+function startFriendsAndMessagesListeners() {
+  if (!currentUser) return;
+
+  onSnapshot(collection(db, 'users', currentUser.uid, 'friends'), (snap) => {
+    friendsCache = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+    friendUidSet = new Set(friendsCache.map(f => f.uid));
+    friendsCache.forEach(f => { profilesCache[f.uid] = { firstName: f.firstName, lastName: f.lastName, avatarUrl: f.avatarUrl }; });
+    if (document.getElementById('page-messages')?.classList.contains('active')) renderMsgSidebar();
+    if (document.getElementById('playerProfileModal')?.classList.contains('open')) {
+      const uid = document.getElementById('ppFriendActions')?.dataset.uid;
+      if (uid) renderFriendActionButtons(uid);
+    }
+  }, (err) => console.error('friends listener error', err));
+
+  onSnapshot(query(collection(db, 'friendRequests'), where('to', '==', currentUser.uid)), (snap) => {
+    incomingRequests = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.status === 'pending');
+    incomingRequests.forEach(r => fetchProfileIfMissing(r.from));
+    updateRequestsBadge();
+    if (document.getElementById('page-messages')?.classList.contains('active')) renderMsgSidebar();
+    if (document.getElementById('playerProfileModal')?.classList.contains('open')) {
+      const uid = document.getElementById('ppFriendActions')?.dataset.uid;
+      if (uid) renderFriendActionButtons(uid);
+    }
+  }, (err) => console.error('incoming requests listener error', err));
+
+  onSnapshot(query(collection(db, 'friendRequests'), where('from', '==', currentUser.uid)), (snap) => {
+    outgoingRequests = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.status === 'pending');
+    if (document.getElementById('page-messages')?.classList.contains('active')) renderMsgSidebar();
+    if (document.getElementById('playerProfileModal')?.classList.contains('open')) {
+      const uid = document.getElementById('ppFriendActions')?.dataset.uid;
+      if (uid) renderFriendActionButtons(uid);
+    }
+  }, (err) => console.error('outgoing requests listener error', err));
+
+  onSnapshot(query(collection(db, 'conversations'), where('participants', 'array-contains', currentUser.uid)), (snap) => {
+    conversationsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => ((b.lastMessageAt?.seconds) || 0) - ((a.lastMessageAt?.seconds) || 0));
+    updateMessagesBadge();
+    if (document.getElementById('page-messages')?.classList.contains('active')) renderMsgSidebar();
+  }, (err) => console.error('conversations listener error', err));
+}
+
+async function fetchProfileIfMissing(uid) {
+  if (profilesCache[uid]) return profilesCache[uid];
+  try {
+    const snap = await getDoc(doc(db, 'users', uid));
+    if (snap.exists()) {
+      const p = snap.data();
+      profilesCache[uid] = { firstName: p.firstName || '', lastName: p.lastName || '', avatarUrl: p.avatarUrl || '' };
+    }
+  } catch (e) { /* ignore */ }
+  if (document.getElementById('page-messages')?.classList.contains('active')) renderMsgSidebar();
+  return profilesCache[uid];
+}
+
+function updateRequestsBadge() {
+  const navBadge = document.getElementById('reqTabBadge');
+  if (navBadge) {
+    navBadge.textContent = incomingRequests.length;
+    navBadge.style.display = incomingRequests.length ? '' : 'none';
+  }
+  updateMessagesBadge();
+}
+
+function updateMessagesBadge() {
+  const navBadge = document.getElementById('msgNavBadge');
+  if (!navBadge || !currentUser) return;
+  const unreadConvos = conversationsCache.filter(c => {
+    const lastRead = c.lastRead?.[currentUser.uid]?.seconds || 0;
+    const lastMsg = c.lastMessageAt?.seconds || 0;
+    return c.lastSenderId && c.lastSenderId !== currentUser.uid && lastMsg > lastRead;
+  }).length;
+  const total = unreadConvos + incomingRequests.length;
+  navBadge.textContent = total;
+  navBadge.style.display = total ? '' : 'none';
+}
+
+function renderFriendActionButtons(uid) {
+  const el = document.getElementById('ppFriendActions');
+  if (!el) return;
+  el.dataset.uid = uid;
+
+  if (!currentUser || uid === currentUser.uid) { el.innerHTML = ''; return; }
+
+  if (friendUidSet.has(uid)) {
+    el.innerHTML = `
+      <span class="badge" style="background:rgba(34,197,94,.15);color:var(--success)">✓ Friends</span>
+      <button class="btn btn-primary btn-sm" onclick="closeModal('playerProfileModal');openChatWithFriend('${uid}')">💬 Message</button>`;
+    return;
+  }
+  const incoming = incomingRequests.find(r => r.from === uid);
+  if (incoming) {
+    el.innerHTML = `
+      <button class="btn btn-success btn-sm" onclick="acceptFriendRequest('${uid}')">Accept Request</button>
+      <button class="btn btn-outline btn-sm" onclick="declineFriendRequest('${uid}')">Decline</button>`;
+    return;
+  }
+  const outgoing = outgoingRequests.find(r => r.to === uid);
+  if (outgoing) {
+    el.innerHTML = `<button class="btn btn-outline btn-sm" onclick="cancelFriendRequest('${uid}')">Request Sent — Cancel</button>`;
+    return;
+  }
+  el.innerHTML = `<button class="btn btn-primary btn-sm" onclick="sendFriendRequest('${uid}')">+ Add Friend</button>`;
+}
+
+async function sendFriendRequest(toUid) {
+  if (!currentUser) return;
+  if (toUid === currentUser.uid) return;
+  try {
+    await setDoc(doc(db, 'friendRequests', `${currentUser.uid}_${toUid}`), {
+      from: currentUser.uid, to: toUid, status: 'pending', createdAt: serverTimestamp()
+    });
+    showToast('Friend request sent!');
+  } catch (e) { showToast('Could not send request.', true); }
+}
+
+async function cancelFriendRequest(toUid) {
+  if (!currentUser) return;
+  try {
+    await deleteDoc(doc(db, 'friendRequests', `${currentUser.uid}_${toUid}`));
+    showToast('Request cancelled.');
+  } catch (e) { showToast('Could not cancel request.', true); }
+}
+
+async function declineFriendRequest(fromUid) {
+  if (!currentUser) return;
+  try {
+    await deleteDoc(doc(db, 'friendRequests', `${fromUid}_${currentUser.uid}`));
+    showToast('Request declined.');
+  } catch (e) { showToast('Could not decline request.', true); }
+}
+
+async function acceptFriendRequest(fromUid) {
+  if (!currentUser) return;
+  try {
+    const fromProfile = await fetchProfileIfMissing(fromUid) || {};
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', currentUser.uid, 'friends', fromUid), {
+      firstName: fromProfile.firstName || '', lastName: fromProfile.lastName || '',
+      avatarUrl: fromProfile.avatarUrl || '', since: serverTimestamp()
+    });
+    batch.set(doc(db, 'users', fromUid, 'friends', currentUser.uid), {
+      firstName: currentUser.firstName || '', lastName: currentUser.lastName || '',
+      avatarUrl: currentUser.avatarUrl || '', since: serverTimestamp()
+    });
+    batch.delete(doc(db, 'friendRequests', `${fromUid}_${currentUser.uid}`));
+    await batch.commit();
+    showToast('You are now friends! 🎉');
+  } catch (e) { showToast('Could not accept request.', true); }
+}
+
+async function removeFriend(uid) {
+  if (!currentUser) return;
+  if (!confirm('Remove this friend? You can re-add them later.')) return;
+  try {
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'users', currentUser.uid, 'friends', uid));
+    batch.delete(doc(db, 'users', uid, 'friends', currentUser.uid));
+    await batch.commit();
+    showToast('Friend removed.');
+  } catch (e) { showToast('Could not remove friend.', true); }
+}
+
+// ======================== MESSAGES ========================
+function switchMsgTab(tab) {
+  currentMsgTab = tab;
+  ['chats', 'friends', 'requests'].forEach(t => {
+    document.getElementById(`msgTab-${t}`).classList.toggle('active', t === tab);
+  });
+  renderMsgSidebar();
+}
+
+function avatarHtmlFor(profile, size = 38) {
+  if (profile?.avatarUrl) return `<img class="msg-avatar" src="${profile.avatarUrl}" style="width:${size}px;height:${size}px">`;
+  return `<div class="msg-avatar" style="width:${size}px;height:${size}px">🏐</div>`;
+}
+
+function renderMsgSidebar() {
+  const el = document.getElementById('msgSidebarList');
+  if (!el) return;
+
+  if (currentMsgTab === 'requests') {
+    if (!incomingRequests.length) {
+      el.innerHTML = '<div class="empty" style="padding:24px"><p style="font-size:13px">No pending requests.</p></div>';
+      return;
+    }
+    el.innerHTML = incomingRequests.map(r => {
+      const p = profilesCache[r.from] || {};
+      const name = `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Player';
+      return `<div class="msg-row">
+        ${avatarHtmlFor(p)}
+        <div class="msg-row-name">${name}</div>
+        <div class="msg-row-actions">
+          <button class="btn btn-success btn-sm" style="padding:5px 10px" onclick="acceptFriendRequest('${r.from}')">Accept</button>
+          <button class="btn btn-outline btn-sm" style="padding:5px 10px" onclick="declineFriendRequest('${r.from}')">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+    return;
+  }
+
+  if (currentMsgTab === 'friends') {
+    if (!friendsCache.length) {
+      el.innerHTML = '<div class="empty" style="padding:24px"><p style="font-size:13px">No friends yet. Add some from the Roster!</p></div>';
+      return;
+    }
+    el.innerHTML = friendsCache.map(f => {
+      const name = `${f.firstName || ''} ${f.lastName || ''}`.trim() || 'Player';
+      return `<div class="msg-row" onclick="openChatWithFriend('${f.uid}')">
+        ${avatarHtmlFor(f)}
+        <div class="msg-row-name">${name}</div>
+        <div class="msg-row-actions">
+          <button class="btn btn-outline btn-sm" style="padding:5px 10px" onclick="event.stopPropagation();removeFriend('${f.uid}')">Remove</button>
+        </div>
+      </div>`;
+    }).join('');
+    return;
+  }
+
+  // chats tab
+  if (!conversationsCache.length) {
+    el.innerHTML = '<div class="empty" style="padding:24px"><p style="font-size:13px">No conversations yet. Message a friend to start one.</p></div>';
+    return;
+  }
+  el.innerHTML = conversationsCache.map(c => {
+    const otherUid = c.participants.find(p => p !== currentUser.uid);
+    const p = profilesCache[otherUid] || {};
+    fetchProfileIfMissing(otherUid);
+    const name = `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Player';
+    const isUnread = c.lastSenderId && c.lastSenderId !== currentUser.uid &&
+      (c.lastMessageAt?.seconds || 0) > (c.lastRead?.[currentUser.uid]?.seconds || 0);
+    return `<div class="msg-row ${currentChatUid === otherUid ? 'active' : ''}" onclick="openChatWithFriend('${otherUid}')">
+      ${avatarHtmlFor(p)}
+      <div style="flex:1;min-width:0">
+        <div class="msg-row-name">${name}</div>
+        <div class="msg-row-preview">${(c.lastMessage || '').replace(/</g, '&lt;')}</div>
+      </div>
+      ${isUnread ? '<span class="msg-badge-dot">•</span>' : ''}
+    </div>`;
+  }).join('');
+}
+
+async function openChatWithFriend(uid) {
+  if (!currentUser) return;
+  if (!friendUidSet.has(uid)) { showToast('You can only message friends.', true); return; }
+
+  showPage('messages');
+  currentChatUid = uid;
+  currentMsgTab = 'chats';
+  switchMsgTab('chats');
+
+  const convoId = convoIdFor(currentUser.uid, uid);
+  const convoRef = doc(db, 'conversations', convoId);
+
+  try {
+    const snap = await getDoc(convoRef);
+    if (!snap.exists()) {
+      await setDoc(convoRef, {
+        participants: [currentUser.uid, uid].sort(),
+        lastMessage: '', lastMessageAt: serverTimestamp(), lastSenderId: '', lastRead: {}
+      });
+    }
+  } catch (e) { /* ignore, will surface on send if rules block it */ }
+
+  await fetchProfileIfMissing(uid);
+  renderChatPanel(uid, convoId);
+
+  // mark read
+  try {
+    await setDoc(convoRef, { lastRead: { [currentUser.uid]: serverTimestamp() } }, { merge: true });
+  } catch (e) { /* ignore */ }
+
+  if (unsubMessages) unsubMessages();
+  unsubMessages = onSnapshot(
+    query(collection(db, 'conversations', convoId, 'messages'), orderBy('createdAt')),
+    (snap) => {
+      const messages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderChatMessages(messages);
+    },
+    (err) => console.error('messages listener error', err)
+  );
+}
+
+function renderChatPanel(uid, convoId) {
+  const p = profilesCache[uid] || {};
+  const name = `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Player';
+  const panel = document.getElementById('msgChatPanel');
+  panel.innerHTML = `
+    <div class="msg-chat-header">
+      ${avatarHtmlFor(p, 32)}
+      <span style="font-weight:700">${name}</span>
+    </div>
+    <div class="msg-chat-body" id="msgChatBody"><div style="color:var(--muted);font-size:13px;text-align:center">Loading messages...</div></div>
+    <div class="msg-chat-input">
+      <input type="text" id="msgChatInput" placeholder="Type a message..." maxlength="1000" onkeydown="if(event.key==='Enter')sendChatMessage('${convoId}','${uid}')">
+      <button class="btn btn-primary btn-sm" onclick="sendChatMessage('${convoId}','${uid}')">Send</button>
+    </div>`;
+}
+
+function renderChatMessages(messages) {
+  const body = document.getElementById('msgChatBody');
+  if (!body) return;
+  if (!messages.length) {
+    body.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center">Say hi! 👋</div>';
+    return;
+  }
+  body.innerHTML = messages.map(m => {
+    const mine = m.senderId === currentUser.uid;
+    return `<div class="msg-bubble ${mine ? 'mine' : 'theirs'}">${(m.text || '').replace(/</g, '&lt;')}</div>`;
+  }).join('');
+  body.scrollTop = body.scrollHeight;
+}
+
+async function sendChatMessage(convoId, otherUid) {
+  if (!currentUser) return;
+  const input = document.getElementById('msgChatInput');
+  const text = (input?.value || '').trim();
+  if (!text) return;
+  if (!friendUidSet.has(otherUid)) { showToast('You can only message friends.', true); return; }
+  input.value = '';
+  try {
+    await addDoc(collection(db, 'conversations', convoId, 'messages'), {
+      senderId: currentUser.uid, text, createdAt: serverTimestamp()
+    });
+    await setDoc(doc(db, 'conversations', convoId), {
+      lastMessage: text.slice(0, 80), lastMessageAt: serverTimestamp(), lastSenderId: currentUser.uid,
+      lastRead: { [currentUser.uid]: serverTimestamp() }
+    }, { merge: true });
+  } catch (e) { showToast('Could not send message.', true); }
 }
 
 // ======================== PROFILE ========================
@@ -2075,7 +2502,7 @@ function renderAdminEvents() {
 }
 
 // ======================== PAGES ========================
-const VALID_PAGES = ['home', 'rules', 'schedule', 'bulletin', 'roster', 'profile', 'admin'];
+const VALID_PAGES = ['home', 'rules', 'schedule', 'bulletin', 'roster', 'profile', 'admin', 'messages'];
 
 function showPage(name) {
   if (!VALID_PAGES.includes(name)) name = 'home';
@@ -2088,6 +2515,7 @@ function showPage(name) {
   if (name === 'admin') { renderAdminEvents(); renderAdminStats(); }
   if (name === 'profile') loadProfile();
   if (name === 'bulletin') renderBulletin();
+  if (name === 'messages') renderMsgSidebar();
   window.scrollTo(0, 0);
   if (window.location.hash.slice(1) !== name) {
     history.replaceState(null, '', '#' + name);
@@ -2098,7 +2526,7 @@ function restorePageFromHash() {
   const name = window.location.hash.slice(1);
   if (!VALID_PAGES.includes(name) || name === 'home') return;
   // Pages that need a signed-in user fall back to home if not logged in yet
-  if ((name === 'roster' || name === 'profile') && !currentUser) return;
+  if ((name === 'roster' || name === 'profile' || name === 'messages') && !currentUser) return;
   if (name === 'admin' && !(currentUser && currentUser.isAdmin)) return;
   showPage(name);
 }
@@ -2242,7 +2670,9 @@ Object.assign(window, {
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile,
   saveProfile, handleAvatarUpload, populateRosterSelect,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
-  openWaiverModal, unlockWaiverCheckbox
+  openWaiverModal, unlockWaiverCheckbox,
+  sendFriendRequest, cancelFriendRequest, declineFriendRequest, acceptFriendRequest,
+  removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage
 });
 </script>
 
@@ -2267,6 +2697,7 @@ Object.assign(window, {
       <div id="ppSkill" style="margin-top:6px"></div>
     </div>
     <div id="ppBio" style="color:var(--muted);font-size:15px;line-height:1.6;text-align:left;background:rgba(255,255,255,.03);border-radius:10px;padding:14px;margin-top:8px"></div>
+    <div id="ppFriendActions" style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap"></div>
   </div>
 </div>
 
