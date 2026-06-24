@@ -1442,15 +1442,20 @@ async function removeGuestFromSignup(regId, eventId, guestIndex) {
   const reg = allRegs.find(r => r.id === regId);
   if (!reg) return;
 
-  const newGuests = (reg.guests || []).filter((_, i) => i !== guestIndex);
-  await setDoc(doc(db, 'registrations', regId), { guests: newGuests }, { merge: true });
+  try {
+    const newGuests = (reg.guests || []).filter((_, i) => i !== guestIndex);
+    await setDoc(doc(db, 'registrations', regId), { guests: newGuests }, { merge: true });
 
-  // One spot freed — check waitlist
-  await promoteFromWaitlist(eventId);
+    // One spot freed — check waitlist
+    await promoteFromWaitlist(eventId);
 
-  showToast('Guest removed.');
-  // Refresh the modal with updated data
-  openManageGroup(eventId);
+    showToast('Guest removed.');
+    // Refresh the modal with updated data
+    openManageGroup(eventId);
+  } catch (e) {
+    console.error('removeGuestFromSignup error:', e);
+    showToast('Could not remove guest. ' + (e.code === 'permission-denied' ? 'Permission denied — check Firestore rules.' : 'Try again.'), true);
+  }
 }
 
 async function cancelSelfFromGroup(eventId) {
@@ -1465,11 +1470,16 @@ async function cancelSelfFromGroup(eventId) {
     : 'Cancel your spot? The next person on the waitlist will be moved up.';
   if (!confirm(msg)) return;
 
-  closeModal('manageGroupModal');
-  await deleteDoc(doc(db, 'registrations', mine.id));
-  const spotsFreed = 1 + (mine.guests?.length || 0);
-  await promoteFromWaitlist(eventId, spotsFreed);
-  showToast('Your spot has been cancelled.');
+  try {
+    closeModal('manageGroupModal');
+    await deleteDoc(doc(db, 'registrations', mine.id));
+    const spotsFreed = 1 + (mine.guests?.length || 0);
+    await promoteFromWaitlist(eventId, spotsFreed);
+    showToast('Your spot has been cancelled.');
+  } catch (e) {
+    console.error('cancelSelfFromGroup error:', e);
+    showToast('Could not cancel your spot. ' + (e.code === 'permission-denied' ? 'Permission denied — check Firestore rules.' : 'Try again.'), true);
+  }
 }
 
 async function promoteFromWaitlist(eventId, spotsCount = 1) {
