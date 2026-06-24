@@ -508,6 +508,36 @@
   }
   .tab.active { background: linear-gradient(135deg, var(--fire), var(--gold)); color: #000; }
 
+  #page-rules .card { position: relative; padding-left: 64px; }
+  .rule-num {
+    position: absolute;
+    left: 18px;
+    top: 22px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--fire), var(--gold));
+    color: #000;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 900;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #page-rules .card h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: 19px;
+    color: var(--gold);
+    text-transform: uppercase;
+    letter-spacing: .3px;
+    margin-bottom: 8px;
+  }
+  #page-rules .card p { color: var(--text); font-size: 15px; line-height: 1.6; }
+  .rule-list { margin: 8px 0 0 0; padding-left: 20px; color: var(--text); font-size: 15px; line-height: 1.7; }
+  .rule-list li { margin-bottom: 4px; }
+
   /* PROFILE */
   .profile-avatar {
     width: 100px;
@@ -606,6 +636,7 @@
   </div>
   <div class="nav-links">
     <button class="nav-btn active" onclick="showPage('home')">Home</button>
+    <button class="nav-btn" onclick="showPage('rules')">Rules</button>
     <button class="nav-btn" onclick="showPage('schedule')">Schedule</button>
     <button class="nav-btn" id="rosterNavBtn" onclick="showPage('roster')" style="display:none">Roster</button>
     <button class="nav-btn" onclick="showPage('bulletin')">🏆 League Board</button>
@@ -636,6 +667,137 @@
     <div class="card" style="text-align:center; border-color: rgba(255,107,0,.3); background: rgba(255,107,0,.05)">
       <p style="font-size:17px; color:var(--text)">🏐 Next open gym coming up — <strong id="nextEventTeaser" style="color:var(--gold)">check the schedule</strong></p>
     </div>
+  </div>
+</div>
+
+<!-- ======================== RULES PAGE ======================== -->
+<div class="page" id="page-rules">
+  <div class="container">
+    <div class="section-title">📋 OLIV Rules</div>
+    <div class="section-sub">Please read before your first session — these keep open gym fun, fair, and safe for everyone.</div>
+
+    <div class="tabs" style="margin-bottom:20px">
+      <button class="tab active" id="rulesTab1" onclick="switchRulesTab('general')">General Rules</button>
+      <button class="tab" id="rulesTab2" onclick="switchRulesTab('intermediate')">Intermediate Open Gyms</button>
+    </div>
+
+    <!-- GENERAL RULES -->
+    <div id="rulesGeneral">
+
+      <div class="card">
+        <div class="rule-num">1</div>
+        <h3>Sign-Up Required</h3>
+        <p>Anyone who wishes to play must sign up using the Google Form, and there is a <strong style="color:var(--gold)">$10 fee</strong> to play. Only players on the posted list will be allowed to participate. If you sign up and can no longer make it, please let us know — repeated no call, no shows will result in being automatically waitlisted.</p>
+        <p style="margin-top:10px">This open gym is primarily intended for players who are <strong>18 years of age or older</strong>. Players who are <strong>15–17 years old</strong> may be permitted to participate provided that:</p>
+        <ul class="rule-list">
+          <li>A parent or legal guardian completes their registration and accepts responsibility for them.</li>
+          <li>They are respectful toward other players, organizers, and facility staff.</li>
+          <li>They possess the skill level, maturity, and game awareness necessary to safely compete with and keep up with the level of play.</li>
+        </ul>
+        <p style="margin-top:10px;color:var(--muted);font-size:14px">Organizers reserve the right to deny participation or remove any player whose skill level, behavior, or conduct is not appropriate for the session.</p>
+      </div>
+
+      <div class="card">
+        <div class="rule-num">2</div>
+        <h3>Check-In Required</h3>
+        <p>All players must check in with <strong>Jude Sanchez</strong> or <strong>Maggie Hernandez</strong> when they arrive, before joining any games.</p>
+      </div>
+
+      <div class="card">
+        <div class="rule-num">3</div>
+        <h3>Team or Individual Play</h3>
+        <p>Teams are not pre-assigned. Players may form teams with anyone present. If you need a team, please ask an organizer and we will help place you.</p>
+        <p style="margin-top:10px">Games are played <strong>6 vs 6</strong> when possible. In some cases there may be teams of 5 or 7, depending on the number of players that attend.</p>
+        <p style="margin-top:10px">If players would like to play together as a group, they must arrive on time. We will not stop or reorganize games in progress to rearrange teams for late arrivals.</p>
+      </div>
+
+      <div class="card">
+        <div class="rule-num">4</div>
+        <h3>Game Format</h3>
+        <p>Games will normally be played to <strong>21 points, win by 2</strong>, with a hard cap at 25.</p>
+        <p style="margin-top:10px">If no extra team is sitting out, games may be played to 25. In this case, teams may continue playing beyond the score until another game finishes and teams can rotate.</p>
+      </div>
+
+      <div class="card">
+        <div class="rule-num">5</div>
+        <h3>2-and-Off Rule</h3>
+        <p>Teams will play using the <strong>2-and-off rule</strong>, meaning a team may play a maximum of two games in a row before rotating off the court.</p>
+        <p style="margin-top:10px">Teams waiting cannot force a team currently playing to sit out early in order to face them or the opposing team. If a team would like to play a different opponent, they may volunteer to give up one of their games and rotate off early — both teams must agree to the switch.</p>
+      </div>
+
+      <div class="card">
+        <div class="rule-num">6</div>
+        <h3>Good Sportsmanship</h3>
+        <p>All players must show respect to teammates, opponents, and organizers. Unsportsmanlike behavior may result in removal from play. Repeated offenses can result in bans.</p>
+      </div>
+
+      <div class="card">
+        <div class="rule-num">7</div>
+        <h3>Safety First</h3>
+        <p>Play safely and be mindful of others on and off the court. Any dangerous or reckless play may result in a warning or removal.</p>
+      </div>
+
+      <div class="card">
+        <div class="rule-num">8</div>
+        <h3>Organizer Decisions</h3>
+        <p>Final decisions on rotations, disputes, and rule enforcement will be made by Jude Sanchez or Maggie Hernandez.</p>
+      </div>
+
+    </div>
+
+    <!-- INTERMEDIATE RULES -->
+    <div id="rulesIntermediate" style="display:none">
+
+      <div class="card" style="border-color:rgba(255,107,0,.3);background:rgba(255,107,0,.04)">
+        <p style="color:var(--gold);font-weight:700">For Intermediate Level Open Gyms, the same rules above apply — with a few changes below:</p>
+      </div>
+
+      <div class="card">
+        <div class="rule-num">1</div>
+        <h3>Intermediate Players Only</h3>
+        <p>These runs are intended for <strong>upper B level players and above</strong>. Players should be capable of playing at a higher level and maintaining competitive rallies.</p>
+        <p style="margin-top:10px">Knowledge of volleyball rotations is encouraged but not required. Players who understand common systems such as 5-1 and 6-2 will generally have an easier time adapting to team play, but participation is not limited to those with rotation experience.</p>
+      </div>
+
+      <div class="card">
+        <div class="rule-num">2</div>
+        <h3>Sign-Up and RSVP Changes</h3>
+        <p>There is <strong>no paid RSVP system</strong> for intermediate open gyms. Sign-ups will be reviewed and filtered to maintain the intended skill level of the runs.</p>
+        <p style="margin-top:10px">The goal is to create competitive and enjoyable games for upper B level and higher players, and we do not mean any disrespect to anyone who may not yet be ready for this level of play. Being approved for one session does not guarantee approval for future sessions. Hosts may make decisions based on both their own observations and feedback from other players regarding whether someone is currently ready for intermediate level runs.</p>
+      </div>
+
+      <div class="card">
+        <div class="rule-num">3</div>
+        <h3>Attendance Expectations</h3>
+        <p>Attendance caps vary depending on the number of courts available:</p>
+        <ul class="rule-list">
+          <li><strong>2 courts:</strong> 30-player cap</li>
+          <li><strong>3 courts:</strong> 42-player cap</li>
+          <li><strong>4 courts:</strong> 54-player cap</li>
+        </ul>
+        <p style="margin-top:10px">These caps are intended to create an appropriate number of rotating teams while minimizing downtime and reducing the need for substitutes during games.</p>
+        <p style="margin-top:10px;color:var(--muted);font-size:14px">No call, no shows negatively impact the experience for everyone involved. If you sign up and are unable to attend, you must notify the organizers ahead of time. Players who repeatedly no call, no show may no longer be allowed back to intermediate-level open gyms.</p>
+      </div>
+
+      <div class="card">
+        <div class="rule-num">4</div>
+        <h3>Competitive Format</h3>
+        <p style="font-weight:700;color:var(--gold);margin-bottom:6px">2 Court Format</p>
+        <p>When two courts are available, attendance is capped at 30 players and games follow a <strong>King of the Court</strong> format with a maximum of three consecutive games played by the same team. After three wins, the team must rotate off the court. This keeps games competitive while ensuring everyone has consistent opportunities to play.</p>
+        <p style="font-weight:700;color:var(--gold);margin:14px 0 6px">3+ Court Format</p>
+        <p>When three or more courts are available, games are played using a <strong>ladder format</strong>. Attendance is capped at 42 players for 3-court sessions and 54 players for 4-court sessions. Teams move up or down courts based on results, allowing teams to play against opponents of similar skill levels throughout the session.</p>
+        <p style="font-weight:700;color:var(--text);margin:14px 0 6px">Ladder Rules</p>
+        <ul class="rule-list">
+          <li>Winning teams move up one court.</li>
+          <li>Losing teams move down one court.</li>
+          <li>Teams on the highest court that win remain on the highest court.</li>
+          <li>Teams on the lowest court that lose remain on the lowest court unless there is a waiting team, in which case they rotate out and the waiting team enters on the lowest court.</li>
+        </ul>
+        <p style="margin-top:10px">Players who arrive after teams have already been established will be placed on the bottom of the ladder and will need to work their way up through match results. The goal of the ladder format is to allow teams to naturally sort themselves by performance while creating competitive matches throughout the session.</p>
+      </div>
+
+    </div>
+
   </div>
 </div>
 
@@ -1770,6 +1932,14 @@ function switchAdminTab(tab) {
   if (tab === 'members') loadAdminMembers();
 }
 
+function switchRulesTab(tab) {
+  document.getElementById('rulesGeneral').style.display = tab === 'general' ? '' : 'none';
+  document.getElementById('rulesIntermediate').style.display = tab === 'intermediate' ? '' : 'none';
+  document.getElementById('rulesTab1').classList.toggle('active', tab === 'general');
+  document.getElementById('rulesTab2').classList.toggle('active', tab === 'intermediate');
+  window.scrollTo(0, 0);
+}
+
 async function loadAdminMembers() {
   const el = document.getElementById('adminMembersList');
   el.innerHTML = '<div style="color:var(--muted);padding:12px">Loading...</div>';
@@ -1987,7 +2157,7 @@ Object.assign(window, {
   openManageGroup, removeGuestFromSignup, cancelSelfFromGroup,
   addGuestRow, removeGuestRow, selectPayment,
   renderRoster, adminRemove, showPage, openModal, closeModal,
-  switchAuthTab, switchAuthTab2, switchAdminTab, openPlayerProfile,
+  switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile,
   saveProfile, handleAvatarUpload, populateRosterSelect,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
   openWaiverModal, unlockWaiverCheckbox
