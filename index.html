@@ -1559,37 +1559,6 @@ async function adminRemove(regId) {
 }
 }
 
-async function openPlayerProfile(uid) {
-  try {
-    const snap = await getDoc(doc(db, 'users', uid));
-    const p = snap.exists() ? snap.data() : null;
-    if (!p) return showToast('Profile not found.', true);
-
-    const avatarEl = document.getElementById('ppAvatar');
-    if (p.avatarUrl) {
-      avatarEl.innerHTML = `<img src="${p.avatarUrl}" style="width:90px;height:90px;border-radius:50%;object-fit:cover">`;
-      avatarEl.style.padding = '0';
-    } else {
-      avatarEl.innerHTML = '🏐';
-      avatarEl.style.padding = '';
-    }
-
-    document.getElementById('ppName').textContent = `${p.firstName || ''} ${p.lastName || ''}`.trim();
-
-    const skillEl = document.getElementById('ppSkill');
-    skillEl.innerHTML = p.skill
-      ? `<span style="background:rgba(91,111,212,.2);color:var(--sky);border-radius:20px;padding:4px 14px;font-size:13px;font-weight:700">${p.skill}</span>`
-      : '';
-
-    const bioEl = document.getElementById('ppBio');
-    bioEl.textContent = p.bio || 'No bio yet.';
-    bioEl.style.display = p.bio ? '' : 'none';
-
-    openModal('playerProfileModal');
-  } catch (e) {
-    showToast('Could not load profile.', true);
-  }
-}
 
 // ======================== PROFILE ========================
 async function loadProfile() {
