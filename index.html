@@ -2745,7 +2745,6 @@ function renderBulletinThreadHeader(p) {
 }
 
 async function openBulletinThread(postId) {
-  if (!currentUser) { showToast('Please log in to view & reply.'); openModal('loginModal'); return; }
   let post = bulletinPostsCache.find(p => p.id === postId);
   if (!post) {
     try {
@@ -2801,7 +2800,8 @@ function renderBulletinReplies(replies) {
 }
 
 async function submitBulletinReply() {
-  if (!currentUser || !currentThreadPostId) return;
+  if (!currentThreadPostId) return;
+  if (!currentUser) { showToast('Please log in to reply.'); openModal('loginModal'); return; }
   const input = document.getElementById('btReplyInput');
   const text = (input?.value || '').trim();
   if (!text) return;
