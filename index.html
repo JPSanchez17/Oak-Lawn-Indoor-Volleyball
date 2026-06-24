@@ -720,7 +720,7 @@
     <button class="nav-btn active" onclick="showPage('home')">Home</button>
     <button class="nav-btn" onclick="showPage('rules')">Rules</button>
     <button class="nav-btn" onclick="showPage('schedule')">Schedule</button>
-    <button class="nav-btn" id="rosterNavBtn" onclick="showPage('roster')" style="display:none">Roster</button>
+    <button class="nav-btn" id="rosterNavBtn" onclick="showPage('roster')" style="display:none">Player List</button>
     <button class="nav-btn" onclick="showPage('bulletin')">League Board</button>
     <button class="nav-btn" id="messagesNavBtn" onclick="showPage('messages')" style="display:none">Messages<span id="msgNavBadge" class="msg-badge-dot" style="display:none"></span></button>
     <button class="nav-btn" id="adminNavBtn" onclick="showPage('admin')" style="display:none">Admin</button>
@@ -955,7 +955,7 @@
 <!-- ======================== ROSTER PAGE ======================== -->
 <div class="page" id="page-roster">
   <div class="container">
-    <div class="section-title">Event Roster</div>
+    <div class="section-title">Event Player List</div>
     <div class="section-sub">See who's signed up for each session.</div>
     <select class="roster-event-select" id="rosterSelect" onchange="renderRoster()">
       <option value="">Select an event...</option>
@@ -2083,6 +2083,7 @@ function startFriendsAndMessagesListeners() {
 
   onSnapshot(query(collection(db, 'conversations'), where('participants', 'array-contains', currentUser.uid)), (snap) => {
     conversationsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .filter(c => !c.hiddenFor?.[currentUser.uid])
       .sort((a, b) => ((b.lastMessageAt?.seconds) || 0) - ((a.lastMessageAt?.seconds) || 0));
     updateMessagesBadge();
     if (document.getElementById('page-messages')?.classList.contains('active')) renderMsgSidebar();
@@ -2285,8 +2286,30 @@ function renderMsgSidebar() {
         <div class="msg-row-preview">${(c.lastMessage || '').replace(/</g, '&lt;')}</div>
       </div>
       ${isUnread ? '<span class="msg-badge-dot">•</span>' : ''}
+      <div class="msg-row-actions">
+        <button class="btn btn-outline btn-sm" style="padding:5px 10px" onclick="event.stopPropagation();deleteChat('${c.id}','${otherUid}')">Delete</button>
+      </div>
     </div>`;
   }).join('');
+}
+
+async function deleteChat(convoId, otherUid) {
+  if (!currentUser) return;
+  if (!confirm('Delete this chat? It will be removed from your messages list. The other person will still see it.')) return;
+  try {
+    await setDoc(doc(db, 'conversations', convoId), {
+      hiddenFor: { [currentUser.uid]: true }
+    }, { merge: true });
+    if (currentChatUid === otherUid) {
+      currentChatUid = null;
+      const panel = document.getElementById('msgChatPanel');
+      if (panel) panel.innerHTML = `<div class="empty" style="margin:auto"><div class="empty-icon">💬</div><p>Pick a friend on the left to start chatting.</p></div>`;
+    }
+    showToast('Chat deleted.');
+  } catch (e) {
+    showToast('Could not delete chat.', true);
+    console.error(e);
+  }
 }
 
 async function openChatWithFriend(uid) {
@@ -2314,9 +2337,12 @@ async function openChatWithFriend(uid) {
   await fetchProfileIfMissing(uid);
   renderChatPanel(uid, convoId);
 
-  // mark read
+  // mark read and un-hide (in case this chat was previously deleted from the list)
   try {
-    await setDoc(convoRef, { lastRead: { [currentUser.uid]: serverTimestamp() } }, { merge: true });
+    await setDoc(convoRef, {
+      lastRead: { [currentUser.uid]: serverTimestamp() },
+      hiddenFor: { [currentUser.uid]: false }
+    }, { merge: true });
   } catch (e) { /* ignore */ }
 
   if (unsubMessages) unsubMessages();
@@ -2373,7 +2399,8 @@ async function sendChatMessage(convoId, otherUid) {
     });
     await setDoc(doc(db, 'conversations', convoId), {
       lastMessage: text.slice(0, 80), lastMessageAt: serverTimestamp(), lastSenderId: currentUser.uid,
-      lastRead: { [currentUser.uid]: serverTimestamp() }
+      lastRead: { [currentUser.uid]: serverTimestamp() },
+      hiddenFor: { [currentUser.uid]: false, [otherUid]: false }
     }, { merge: true });
   } catch (e) { showToast('Could not send message.', true); }
 }
@@ -2886,7 +2913,7 @@ Object.assign(window, {
   openBulletinThread, submitBulletinReply, deleteBulletinReply,
   openWaiverModal, unlockWaiverCheckbox,
   sendFriendRequest, cancelFriendRequest, declineFriendRequest, acceptFriendRequest,
-  removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage
+  removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage, deleteChat
 });
 </script>
 
