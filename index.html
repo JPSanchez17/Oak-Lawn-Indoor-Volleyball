@@ -2537,6 +2537,7 @@ const VALID_PAGES = ['home', 'rules', 'schedule', 'bulletin', 'roster', 'profile
 
 function showPage(name) {
   if (!VALID_PAGES.includes(name)) name = 'home';
+  const enteringMessages = name === 'messages' && !document.getElementById('page-messages').classList.contains('active');
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
@@ -2546,10 +2547,26 @@ function showPage(name) {
   if (name === 'admin') { renderAdminEvents(); renderAdminStats(); }
   if (name === 'profile') loadProfile();
   if (name === 'bulletin') renderBulletin();
-  if (name === 'messages') renderMsgSidebar();
+  if (name === 'messages') {
+    // Each fresh visit to the Messages page should start blank — otherwise
+    // whatever chat was last open (possibly from a previous visit, or even
+    // a different friend) keeps showing until the user clicks something,
+    // which looks like the wrong conversation got swapped in on its own.
+    if (enteringMessages) resetMessagesPanel();
+    renderMsgSidebar();
+  }
   window.scrollTo(0, 0);
   if (window.location.hash.slice(1) !== name) {
     history.replaceState(null, '', '#' + name);
+  }
+}
+
+function resetMessagesPanel() {
+  currentChatUid = null;
+  if (unsubMessages) { unsubMessages(); unsubMessages = null; }
+  const panel = document.getElementById('msgChatPanel');
+  if (panel) {
+    panel.innerHTML = `<div class="empty" style="margin:auto"><div class="empty-icon">💬</div><p>Pick a friend on the left to start chatting.</p></div>`;
   }
 }
 
