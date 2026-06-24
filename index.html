@@ -543,6 +543,33 @@
   /* ADMIN MEMBERS TAB */
   .admin-tabs { display: flex; gap: 4px; margin-bottom: 20px; }
 
+  .bb-filter.active { border-color: var(--sky); color: var(--sky); }
+
+  .bb-card {
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+    transition: border-color .2s;
+  }
+  .bb-card:hover { border-color: var(--sky); }
+
+  .bb-tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    margin-right: 8px;
+  }
+  .bb-tag-lft  { background: rgba(91,111,212,.2); color: var(--sky); }
+  .bb-tag-lfp  { background: rgba(255,98,0,.15); color: var(--fire); }
+  .bb-tag-sub  { background: rgba(34,197,94,.15); color: var(--success); }
+  .bb-tag-other{ background: rgba(147,51,234,.15); color: var(--violet); }
+
   @media (max-width: 600px) {
     .form-row { grid-template-columns: 1fr; }
     .event-card { grid-template-columns: 1fr; }
@@ -565,7 +592,7 @@
     <button class="nav-btn active" onclick="showPage('home')">Home</button>
     <button class="nav-btn" onclick="showPage('schedule')">Schedule</button>
     <button class="nav-btn" id="rosterNavBtn" onclick="showPage('roster')" style="display:none">Roster</button>
-
+    <button class="nav-btn" data-page="bulletin">🏆 League Board</button>
     <button class="nav-btn" id="adminNavBtn" onclick="showPage('admin')" style="display:none">Admin</button>
   </div>
   <div class="nav-user" id="navUser">
@@ -602,6 +629,66 @@
     <div class="section-title">Open Gym Schedule</div>
     <div class="section-sub">Sign up for a session — spots are limited!</div>
     <div id="eventsList"></div>
+  </div>
+</div>
+
+<!-- ======================== BULLETIN BOARD PAGE ======================== -->
+<div class="page" id="page-bulletin">
+  <div class="container">
+    <div class="section-title">🏆 League Board</div>
+    <div class="section-sub">Find a league team, recruit players, or post that you're looking for a spot.</div>
+
+    <!-- Post Form -->
+    <div class="card" id="bulletinPostForm" style="display:none;border-color:rgba(255,107,0,.3);background:rgba(255,107,0,.04);margin-bottom:24px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:22px;color:var(--gold);text-transform:uppercase;margin-bottom:16px">📌 Post to League Board</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Post Type</label>
+          <select id="bb-type" style="background:var(--card);border:1.5px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;width:100%;font-family:'Barlow',sans-serif;font-size:15px">
+            <option value="lft">🙋 Looking for League Team</option>
+            <option value="lfp">📣 Team Looking for Players</option>
+            <option value="sub">🔄 Need a League Sub</option>
+            <option value="other">💬 Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Skill Level</label>
+          <select id="bb-skill" style="background:var(--card);border:1.5px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;width:100%;font-family:'Barlow',sans-serif;font-size:15px">
+            <option value="Any">Any Level</option>
+            <option value="Beginner">Beginner</option>
+            <option value="Intermediate">Intermediate</option>
+            <option value="Advanced">Advanced</option>
+            <option value="Competitive">Competitive</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Title / Headline</label>
+        <input type="text" id="bb-title" placeholder="e.g. Setter looking for coed team, Mon/Wed available" maxlength="80">
+      </div>
+      <div class="form-group">
+        <label>Details</label>
+        <textarea id="bb-body" rows="3" placeholder="Tell people about yourself, your team, availability, contact info..." maxlength="500" style="background:var(--card);border:1.5px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;width:100%;font-family:'Barlow',sans-serif;font-size:15px;resize:vertical"></textarea>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="submitBulletinPost()">Post It</button>
+        <button class="btn btn-outline" onclick="document.getElementById('bulletinPostForm').style.display='none'">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Action Row -->
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:20px">
+      <button class="btn btn-primary" id="bbPostBtn" onclick="openBulletinForm()">+ Post</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="bbFilters">
+        <button class="btn btn-outline btn-sm bb-filter active" data-filter="all" onclick="filterBulletin('all',this)">All</button>
+        <button class="btn btn-outline btn-sm bb-filter" data-filter="lft" onclick="filterBulletin('lft',this)">Looking for Team</button>
+        <button class="btn btn-outline btn-sm bb-filter" data-filter="lfp" onclick="filterBulletin('lfp',this)">Team Seeking Players</button>
+        <button class="btn btn-outline btn-sm bb-filter" data-filter="sub" onclick="filterBulletin('sub',this)">Need a League Sub</button>
+        <button class="btn btn-outline btn-sm bb-filter" data-filter="other" onclick="filterBulletin('other',this)">Other</button>
+      </div>
+    </div>
+
+    <div id="bulletinList"><div style="color:var(--muted);padding:12px">Loading posts...</div></div>
   </div>
 </div>
 
@@ -1531,6 +1618,7 @@ function showPage(name) {
   if (name === 'roster') populateRosterSelect();
   if (name === 'admin') { renderAdminEvents(); renderAdminStats(); }
   if (name === 'profile') loadProfile();
+  if (name === 'bulletin') renderBulletin();
   window.scrollTo(0, 0);
 }
 
@@ -1554,14 +1642,106 @@ function switchAuthTab2(tab) {
   document.getElementById('signupTab2').classList.toggle('active', tab === 'login2');
 }
 
-Object.assign(window, {
+// ======================== BULLETIN BOARD ========================
+let bbFilter = 'all';
+
+function openBulletinForm() {
+  if (!currentUser) { showToast('Please log in to post.'); openModal('loginModal'); return; }
+  document.getElementById('bulletinPostForm').style.display = '';
+  document.getElementById('bulletinPostForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function submitBulletinPost() {
+  if (!currentUser) { showToast('Please log in to post.'); return; }
+  const title = document.getElementById('bb-title').value.trim();
+  const body  = document.getElementById('bb-body').value.trim();
+  const type  = document.getElementById('bb-type').value;
+  const skill = document.getElementById('bb-skill').value;
+  if (!title) { showToast('Please add a headline.'); return; }
+  try {
+    await addDoc(collection(db, 'bulletin'), {
+      uid: currentUser.uid,
+      name: (currentUser.firstName || '') + ' ' + (currentUser.lastName || ''),
+      avatarUrl: currentUser.avatarUrl || '',
+      type, skill, title, body,
+      createdAt: Date.now()
+    });
+    showToast('Post added! 📌');
+    document.getElementById('bb-title').value = '';
+    document.getElementById('bb-body').value = '';
+    document.getElementById('bulletinPostForm').style.display = 'none';
+    renderBulletin();
+  } catch(e) { showToast('Could not post. Try again.'); console.error(e); }
+}
+
+async function deleteBulletinPost(id) {
+  if (!confirm('Delete this post?')) return;
+  try { await deleteDoc(doc(db, 'bulletin', id)); showToast('Post removed.'); renderBulletin(); }
+  catch(e) { showToast('Could not delete.'); }
+}
+
+function filterBulletin(filter, btn) {
+  bbFilter = filter;
+  document.querySelectorAll('.bb-filter').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderBulletin();
+}
+
+const BB_LABELS = { lft: '🙋 Looking for League Team', lfp: '📣 Team Seeking Players', sub: '🔄 Need a League Sub', other: '💬 Other' };
+
+async function renderBulletin() {
+  const el = document.getElementById('bulletinList');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--muted);padding:12px">Loading...</div>';
+  try {
+    const snap = await getDocs(query(collection(db, 'bulletin'), orderBy('createdAt', 'desc')));
+    let posts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (bbFilter !== 'all') posts = posts.filter(p => p.type === bbFilter);
+    if (!posts.length) {
+      el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><p>No posts yet${bbFilter !== 'all' ? ' in this category' : ''}. Be the first!</p></div>`;
+      return;
+    }
+    el.innerHTML = posts.map(p => {
+      const date = new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const canDelete = currentUser && (currentUser.uid === p.uid || currentUser.isAdmin);
+      const avatar = p.avatarUrl
+        ? `<img src="${p.avatarUrl}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid var(--border)">`
+        : `<div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--court),var(--navy));display:flex;align-items:center;justify-content:center;font-size:18px;border:2px solid var(--border)">🏐</div>`;
+      return `
+      <div class="bb-card">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div style="flex-shrink:0">${avatar}</div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+              <span class="bb-tag bb-tag-${p.type}">${BB_LABELS[p.type] || p.type}</span>
+              ${p.skill && p.skill !== 'Any' ? `<span style="background:rgba(255,193,7,.1);color:var(--gold);padding:2px 8px;border-radius:100px;font-size:11px;font-weight:700">${p.skill}</span>` : ''}
+            </div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;margin-bottom:4px;line-height:1.2">${p.title}</div>
+            ${p.body ? `<div style="color:var(--muted);font-size:14px;line-height:1.55;margin-top:4px;white-space:pre-wrap">${p.body}</div>` : ''}
+            <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+              <span style="color:var(--muted);font-size:13px">— ${p.name || 'Anonymous'} · ${date}</span>
+              ${canDelete ? `<button class="btn btn-danger btn-sm" onclick="deleteBulletinPost('${p.id}')">Remove</button>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="empty"><p>Could not load posts.</p></div>';
+    console.error(e);
+  }
+}
+
+
   login, login2, register, register2, googleSignIn, logout,
   addEvent, deleteEvent, openEventSignup, confirmSignup, cancelSignup,
   addGuestRow, removeGuestRow, selectPayment,
   renderRoster, adminRemove, showPage, openModal, closeModal,
   switchAuthTab, switchAuthTab2, switchAdminTab, openPlayerProfile,
-  saveProfile, handleAvatarUpload, populateRosterSelect
+  saveProfile, handleAvatarUpload, populateRosterSelect,
+  openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin
 });
+window.dispatchEvent(new Event('appReady'));
 </script>
 
 <!-- ======================== PLAYER PROFILE MODAL ======================== -->
@@ -1610,5 +1790,19 @@ Object.assign(window, {
   <div style="margin-top:20px;font-size:13px;color:var(--muted)">© 2025 Oak Lawn Indoor Volleyball</div>
 </footer>
 
+<script>
+// Safe nav delegation — works even before the ES module finishes loading
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('[data-page]');
+  if (!btn) return;
+  const page = btn.dataset.page;
+  if (typeof window.showPage === 'function') {
+    window.showPage(page);
+  } else {
+    // Module not ready yet — wait for it
+    window.addEventListener('appReady', function() { window.showPage(page); }, { once: true });
+  }
+});
+</script>
 </body>
 </html>
