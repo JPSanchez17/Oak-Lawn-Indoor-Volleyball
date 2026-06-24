@@ -2562,6 +2562,10 @@ function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
   if (id === 'manageGroupModal') currentManageGroupEventId = null;
+  if (id === 'bulletinThreadModal') {
+    if (unsubReplies) { unsubReplies(); unsubReplies = null; }
+    currentThreadPostId = null;
+  }
 }
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
@@ -2582,6 +2586,9 @@ function switchAuthTab2(tab) {
 
 // ======================== BULLETIN BOARD ========================
 let bbFilter = 'all';
+let bulletinPostsCache = [];
+let currentThreadPostId = null;
+let unsubReplies = null;
 
 function openBulletinForm() {
   if (!currentUser) { showToast('Please log in to post.'); openModal('loginModal'); return; }
@@ -2614,8 +2621,118 @@ async function submitBulletinPost() {
 
 async function deleteBulletinPost(id) {
   if (!confirm('Delete this post?')) return;
-  try { await deleteDoc(doc(db, 'bulletin', id)); showToast('Post removed.'); renderBulletin(); }
+  try {
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'bulletin', id));
+    const repliesSnap = await getDocs(collection(db, 'bulletin', id, 'replies'));
+    repliesSnap.forEach(r => batch.delete(r.ref));
+    await batch.commit();
+    showToast('Post removed.');
+    if (currentThreadPostId === id) closeModal('bulletinThreadModal');
+    renderBulletin();
+  }
   catch(e) { showToast('Could not delete.'); }
+}
+
+// ======================== BULLETIN THREAD (REPLIES) ========================
+function renderBulletinThreadHeader(p) {
+  const date = new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const avatar = p.avatarUrl
+    ? `<img src="${p.avatarUrl}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border)">`
+    : `<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--court),var(--navy));display:flex;align-items:center;justify-content:center;font-size:20px;border:2px solid var(--border)">🏐</div>`;
+  document.getElementById('btPostHeader').innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:12px">
+      <div style="flex-shrink:0;cursor:pointer" onclick="openPlayerProfile('${p.uid}')">${avatar}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+          <span class="bb-tag bb-tag-${p.type}">${BB_LABELS[p.type] || p.type}</span>
+          ${p.skill && p.skill !== 'Any' ? `<span style="background:rgba(255,193,7,.1);color:var(--gold);padding:2px 8px;border-radius:100px;font-size:11px;font-weight:700">${p.skill}</span>` : ''}
+        </div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;margin-bottom:4px;line-height:1.2">${p.title}</div>
+        ${p.body ? `<div style="color:var(--muted);font-size:14px;line-height:1.55;margin-top:4px;white-space:pre-wrap">${p.body}</div>` : ''}
+        <div style="margin-top:8px;color:var(--muted);font-size:13px">— <span style="cursor:pointer;text-decoration:underline" onclick="openPlayerProfile('${p.uid}')">${p.name || 'Anonymous'}</span> · ${date}</div>
+      </div>
+    </div>`;
+}
+
+async function openBulletinThread(postId) {
+  if (!currentUser) { showToast('Please log in to view & reply.'); openModal('loginModal'); return; }
+  let post = bulletinPostsCache.find(p => p.id === postId);
+  if (!post) {
+    try {
+      const snap = await getDoc(doc(db, 'bulletin', postId));
+      if (snap.exists()) post = { id: postId, ...snap.data() };
+    } catch (e) { /* ignore */ }
+  }
+  if (!post) return showToast('Post not found.', true);
+
+  currentThreadPostId = postId;
+  renderBulletinThreadHeader(post);
+  document.getElementById('btReplies').innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center">Loading replies...</div>';
+  document.getElementById('btReplyInput').value = '';
+  openModal('bulletinThreadModal');
+
+  if (unsubReplies) unsubReplies();
+  unsubReplies = onSnapshot(
+    query(collection(db, 'bulletin', postId, 'replies'), orderBy('createdAt')),
+    (snap) => renderBulletinReplies(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+    (err) => {
+      console.error('replies listener error', err);
+      const el = document.getElementById('btReplies');
+      if (el) el.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center">Could not load replies.</div>';
+    }
+  );
+}
+
+function renderBulletinReplies(replies) {
+  const el = document.getElementById('btReplies');
+  if (!el) return;
+  if (!replies.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center">No replies yet. Be the first to respond!</div>';
+    return;
+  }
+  el.innerHTML = replies.map(r => {
+    const canDelete = currentUser && (currentUser.uid === r.uid || currentUser.isAdmin);
+    const avatar = r.avatarUrl
+      ? `<img src="${r.avatarUrl}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;border:2px solid var(--border)">`
+      : `<div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--court),var(--navy));display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid var(--border)">🏐</div>`;
+    return `
+    <div style="display:flex;align-items:flex-start;gap:10px">
+      <div style="flex-shrink:0;cursor:pointer" onclick="openPlayerProfile('${r.uid}')">${avatar}</div>
+      <div style="flex:1;min-width:0;background:rgba(255,255,255,.03);border-radius:10px;padding:8px 12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span style="font-weight:700;font-size:13px;cursor:pointer" onclick="openPlayerProfile('${r.uid}')">${r.name || 'Anonymous'}</span>
+          ${canDelete ? `<button style="border:none;background:none;color:var(--muted);font-size:12px;cursor:pointer" onclick="deleteBulletinReply('${r.id}')">✕</button>` : ''}
+        </div>
+        <div style="color:var(--text);font-size:14px;line-height:1.45;white-space:pre-wrap;margin-top:2px">${(r.text || '').replace(/</g, '&lt;')}</div>
+      </div>
+    </div>`;
+  }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+async function submitBulletinReply() {
+  if (!currentUser || !currentThreadPostId) return;
+  const input = document.getElementById('btReplyInput');
+  const text = (input?.value || '').trim();
+  if (!text) return;
+  input.value = '';
+  try {
+    await addDoc(collection(db, 'bulletin', currentThreadPostId, 'replies'), {
+      uid: currentUser.uid,
+      name: `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim(),
+      avatarUrl: currentUser.avatarUrl || '',
+      text,
+      createdAt: serverTimestamp()
+    });
+  } catch (e) { showToast('Could not post reply.', true); console.error(e); }
+}
+
+async function deleteBulletinReply(replyId) {
+  if (!currentThreadPostId) return;
+  if (!confirm('Delete this reply?')) return;
+  try { await deleteDoc(doc(db, 'bulletin', currentThreadPostId, 'replies', replyId)); }
+  catch (e) { showToast('Could not delete reply.', true); }
 }
 
 function filterBulletin(filter, btn) {
@@ -2634,6 +2751,7 @@ async function renderBulletin() {
   try {
     const snap = await getDocs(query(collection(db, 'bulletin'), orderBy('createdAt', 'desc')));
     let posts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    bulletinPostsCache = posts;
     if (bbFilter !== 'all') posts = posts.filter(p => p.type === bbFilter);
     if (!posts.length) {
       el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><p>No posts yet${bbFilter !== 'all' ? ' in this category' : ''}. Be the first!</p></div>`;
@@ -2646,9 +2764,9 @@ async function renderBulletin() {
         ? `<img src="${p.avatarUrl}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid var(--border)">`
         : `<div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--court),var(--navy));display:flex;align-items:center;justify-content:center;font-size:18px;border:2px solid var(--border)">🏐</div>`;
       return `
-      <div class="bb-card">
+      <div class="bb-card" style="cursor:pointer" onclick="openBulletinThread('${p.id}')">
         <div style="display:flex;align-items:flex-start;gap:12px">
-          <div style="flex-shrink:0">${avatar}</div>
+          <div style="flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();openPlayerProfile('${p.uid}')">${avatar}</div>
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px">
               <span class="bb-tag bb-tag-${p.type}">${BB_LABELS[p.type] || p.type}</span>
@@ -2657,8 +2775,8 @@ async function renderBulletin() {
             <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;margin-bottom:4px;line-height:1.2">${p.title}</div>
             ${p.body ? `<div style="color:var(--muted);font-size:14px;line-height:1.55;margin-top:4px;white-space:pre-wrap">${p.body}</div>` : ''}
             <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-              <span style="color:var(--muted);font-size:13px">— ${p.name || 'Anonymous'} · ${date}</span>
-              ${canDelete ? `<button class="btn btn-danger btn-sm" onclick="deleteBulletinPost('${p.id}')">Remove</button>` : ''}
+              <span style="color:var(--muted);font-size:13px">— <span style="cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();openPlayerProfile('${p.uid}')">${p.name || 'Anonymous'}</span> · ${date} · <span style="color:var(--sky)">💬 View &amp; reply</span></span>
+              ${canDelete ? `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteBulletinPost('${p.id}')">Remove</button>` : ''}
             </div>
           </div>
         </div>
@@ -2691,6 +2809,7 @@ Object.assign(window, {
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile,
   saveProfile, handleAvatarUpload, populateRosterSelect,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
+  openBulletinThread, submitBulletinReply, deleteBulletinReply,
   openWaiverModal, unlockWaiverCheckbox,
   sendFriendRequest, cancelFriendRequest, declineFriendRequest, acceptFriendRequest,
   removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage
@@ -2719,6 +2838,19 @@ Object.assign(window, {
     </div>
     <div id="ppBio" style="color:var(--muted);font-size:15px;line-height:1.6;text-align:left;background:rgba(255,255,255,.03);border-radius:10px;padding:14px;margin-top:8px"></div>
     <div id="ppFriendActions" style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap"></div>
+  </div>
+</div>
+
+<!-- ======================== BULLETIN THREAD MODAL ======================== -->
+<div class="modal-overlay" id="bulletinThreadModal">
+  <div class="modal" style="max-width:600px;position:relative;text-align:left">
+    <button class="modal-close" onclick="closeModal('bulletinThreadModal')">✕</button>
+    <div id="btPostHeader"></div>
+    <div id="btReplies" style="display:flex;flex-direction:column;gap:12px;max-height:320px;overflow-y:auto;margin:18px 0 0;padding-right:4px"></div>
+    <div class="msg-chat-input" style="padding:14px 0 0;border-top:1px solid var(--border);margin-top:14px">
+      <input type="text" id="btReplyInput" placeholder="Write a reply..." maxlength="500" onkeydown="if(event.key==='Enter')submitBulletinReply()">
+      <button class="btn btn-primary btn-sm" onclick="submitBulletinReply()">Reply</button>
+    </div>
   </div>
 </div>
 
