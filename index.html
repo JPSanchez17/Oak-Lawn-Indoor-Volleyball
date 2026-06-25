@@ -1598,8 +1598,18 @@ function renderSchedule() {
 }
 
 // ======================== EVENT SIGNUP FLOW ========================
+let pendingSignupEventId = null;
+
 function openEventSignup(eventId) {
   if (!currentUser) { showToast('Log in or create an account first!', true); openModal('loginModal'); return; }
+  if (!currentUser.phone) {
+    pendingSignupEventId = eventId;
+    showToast('Please add a phone number to your profile before signing up.', true);
+    showPage('profile');
+    showPhoneRequiredBanner();
+    return;
+  }
+  pendingSignupEventId = null;
   const ev = eventsCache.find(e => e.id === eventId);
   if (!ev) return;
   selectedEventId = eventId;
@@ -2483,6 +2493,37 @@ async function loadProfile() {
   }
 }
 
+function showPhoneRequiredBanner() {
+  const existing = document.getElementById('phoneRequiredBanner');
+  if (existing) return;
+  const profilePage = document.getElementById('page-profile');
+  if (!profilePage) return;
+  const banner = document.createElement('div');
+  banner.id = 'phoneRequiredBanner';
+  banner.style.cssText = 'background:rgba(255,98,0,.12);border:1.5px solid var(--fire);border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px;';
+  banner.innerHTML = `
+    <span style="font-size:22px">📞</span>
+    <div>
+      <div style="font-weight:700;color:var(--gold);margin-bottom:2px">Phone number required</div>
+      <div style="font-size:13px;color:var(--muted)">Add your phone number below and save your profile to continue signing up for an event.</div>
+    </div>`;
+  const container = profilePage.querySelector('.container');
+  if (container) container.insertBefore(banner, container.firstChild);
+  // Highlight the phone field
+  const phoneField = document.getElementById('profilePhone');
+  if (phoneField) {
+    phoneField.style.borderColor = 'var(--fire)';
+    phoneField.focus();
+  }
+}
+
+function hidePhoneRequiredBanner() {
+  const banner = document.getElementById('phoneRequiredBanner');
+  if (banner) banner.remove();
+  const phoneField = document.getElementById('profilePhone');
+  if (phoneField) phoneField.style.borderColor = '';
+}
+
 async function saveProfile() {
   if (!currentUser) return;
   const first = document.getElementById('profileFirst').value.trim();
@@ -2491,13 +2532,22 @@ async function saveProfile() {
   const skill = document.getElementById('profileSkill').value;
   const bio = document.getElementById('profileBio').value.trim();
   if (!first || !last) return showToast('First and last name are required.', true);
+  if (!phone) return showToast('Please add a phone number so we can contact you.', true);
 
   await setDoc(doc(db, 'users', currentUser.uid), { firstName: first, lastName: last, skill, bio }, { merge: true });
   await setDoc(doc(db, 'users', currentUser.uid, 'private', 'contact'), { email: currentUser.email, phone }, { merge: true });
   currentUser.firstName = first; currentUser.lastName = last; currentUser.phone = phone;
   document.getElementById('profileDisplayName').textContent = `${first} ${last}`;
+  hidePhoneRequiredBanner();
   showToast('Profile saved! ✅');
   afterLogin();
+
+  // Resume a pending event signup if the user was redirected here to add their phone
+  if (pendingSignupEventId) {
+    const eid = pendingSignupEventId;
+    pendingSignupEventId = null;
+    setTimeout(() => openEventSignup(eid), 400);
+  }
 }
 
 async function handleAvatarUpload(event) {
@@ -2655,7 +2705,11 @@ function showPage(name) {
   if (name === 'schedule') renderSchedule();
   if (name === 'roster') populateRosterSelect();
   if (name === 'admin') { renderAdminEvents(); renderAdminStats(); }
-  if (name === 'profile') loadProfile();
+  if (name === 'profile') {
+    loadProfile();
+    if (currentUser && !currentUser.phone) showPhoneRequiredBanner();
+    else hidePhoneRequiredBanner();
+  }
   if (name === 'bulletin') renderBulletin();
   if (name === 'messages') {
     // Each fresh visit to the Messages page should start blank — otherwise
@@ -2963,7 +3017,7 @@ Object.assign(window, {
   addGuestRow, removeGuestRow, selectPayment,
   renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleGuestPayment, showPage, openModal, closeModal,
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile,
-  saveProfile, handleAvatarUpload, populateRosterSelect,
+  saveProfile, handleAvatarUpload, populateRosterSelect, showPhoneRequiredBanner,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
   openBulletinThread, submitBulletinReply, deleteBulletinReply,
   openWaiverModal, unlockWaiverCheckbox,
