@@ -1096,7 +1096,10 @@
 
     <!-- MEMBERS TAB -->
     <div id="adminTabMembers" style="display:none">
-      <div class="section-title" style="font-size:22px;margin-bottom:12px;">All Members</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <div class="section-title" style="font-size:22px;margin:0;">All Members</div>
+        <button class="btn btn-primary btn-sm" onclick="openAddMemberModal()">➕ Add Member</button>
+      </div>
       <div id="adminMembersList"></div>
     </div>
   </div>
@@ -2705,6 +2708,38 @@ async function deleteMember(uid, name) {
   }
 }
 
+function openAddMemberModal() {
+  if (!currentUser?.isAdmin) return;
+  ['amFirst', 'amLast', 'amEmail', 'amPhone', 'amBio'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('amSkill').value = '';
+  openModal('addMemberModal');
+}
+
+async function submitAddMember() {
+  if (!currentUser?.isAdmin) return;
+  const first = document.getElementById('amFirst').value.trim();
+  const last = document.getElementById('amLast').value.trim();
+  const email = document.getElementById('amEmail').value.trim();
+  const phone = document.getElementById('amPhone').value.trim();
+  const skill = document.getElementById('amSkill').value;
+  const bio = document.getElementById('amBio').value.trim();
+  if (!first || !last) return showToast('First and last name are required.', true);
+
+  try {
+    const newRef = doc(collection(db, 'users'));
+    await setDoc(newRef, { firstName: first, lastName: last, skill, bio, avatarUrl: '', manual: true, addedBy: currentUser.uid, createdAt: Date.now() });
+    if (email || phone) {
+      await setDoc(doc(db, 'users', newRef.id, 'private', 'contact'), { email: email || '', phone: phone || '' });
+    }
+    closeModal('addMemberModal');
+    showToast(`${first} ${last} added to the member list! ✅`);
+    loadAdminMembers();
+  } catch (e) {
+    console.error('submitAddMember error:', e);
+    showToast('Could not add member.', true);
+  }
+}
+
 async function renderAdminStats() {
   let totalSignups = 0;
   eventsCache.forEach(e => { totalSignups += (regsCache[e.id] || []).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0); });
@@ -3070,6 +3105,7 @@ Object.assign(window, {
   renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleGuestPayment, showPage, openModal, closeModal,
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile,
   saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, openIconPicker, selectAvatarIcon,
+  openAddMemberModal, submitAddMember,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
   openBulletinThread, submitBulletinReply, deleteBulletinReply,
   openWaiverModal, unlockWaiverCheckbox,
@@ -3078,6 +3114,33 @@ Object.assign(window, {
 });
 </script>
 
+
+<!-- ======================== ADD MEMBER MODAL (admin) ======================== -->
+<div class="modal-overlay" id="addMemberModal">
+  <div class="modal" style="position:relative">
+    <button class="modal-close" onclick="closeModal('addMemberModal')">✕</button>
+    <h2>Add Member</h2>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:18px">Manually add someone to the member list — useful for walk-ins or players who haven't signed up online. They won't get a login; this just adds them to the roster/directory.</p>
+    <div class="form-row">
+      <div class="form-group"><label>First Name</label><input type="text" id="amFirst" placeholder="Alex"></div>
+      <div class="form-group"><label>Last Name</label><input type="text" id="amLast" placeholder="Johnson"></div>
+    </div>
+    <div class="form-group"><label>Email <span style="color:var(--muted);font-weight:400">(optional)</span></label><input type="email" id="amEmail" placeholder="you@email.com"></div>
+    <div class="form-group"><label>Phone <span style="color:var(--muted);font-weight:400">(optional)</span></label><input type="tel" id="amPhone" placeholder="(708) 555-0000"></div>
+    <div class="form-group">
+      <label>Skill Level <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+      <select id="amSkill">
+        <option value="">Select level...</option>
+        <option value="A Level">A Level</option>
+        <option value="BB Level">BB Level</option>
+        <option value="B Level">B Level</option>
+        <option value="C Level">C Level</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Bio / Notes <span style="color:var(--muted);font-weight:400">(optional)</span></label><textarea id="amBio" placeholder="Anything worth noting..."></textarea></div>
+    <button class="btn btn-primary btn-full" onclick="submitAddMember()" style="margin-top:4px">Add to Member List</button>
+  </div>
+</div>
 
 <!-- ======================== ICON PICKER MODAL ======================== -->
 <div class="modal-overlay" id="iconPickerModal">
