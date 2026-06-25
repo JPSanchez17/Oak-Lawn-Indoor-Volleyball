@@ -1285,6 +1285,7 @@ let selectedPayment = null;
 let guestCount = 0;
 let currentManageGroupEventId = null;
 let adminAddPlayerEventId = null;
+let editingEventId = null;
 let unsubEvents = null;
 let unsubRegistrations = null;
 
@@ -1564,6 +1565,51 @@ async function deleteEvent(id) {
   });
   await batch.commit();
   showToast('Event deleted.');
+}
+
+function openEditEventModal(eventId) {
+  if (!currentUser?.isAdmin) return;
+  const ev = eventsCache.find(e => e.id === eventId);
+  if (!ev) return showToast('Event not found.', true);
+  editingEventId = eventId;
+  document.getElementById('ee-name').value = ev.name || '';
+  document.getElementById('ee-date').value = ev.date || '';
+  document.getElementById('ee-time').value = ev.time || '';
+  document.getElementById('ee-location').value = ev.location || '';
+  document.getElementById('ee-spots').value = ev.spots ?? '';
+  document.getElementById('ee-cost').value = ev.cost ?? '';
+  document.getElementById('ee-courts').value = ev.courts ?? '';
+  openModal('editEventModal');
+}
+
+async function submitEditEvent() {
+  if (!currentUser?.isAdmin) return;
+  const eventId = editingEventId;
+  if (!eventId) return;
+
+  const name = document.getElementById('ee-name').value.trim();
+  const date = document.getElementById('ee-date').value;
+  const time = document.getElementById('ee-time').value.trim();
+  const location = document.getElementById('ee-location').value.trim();
+  const spots = parseInt(document.getElementById('ee-spots').value);
+  const cost = parseFloat(document.getElementById('ee-cost').value) || 0;
+  const courts = parseInt(document.getElementById('ee-courts').value) || null;
+  if (!name || !date || !time || !location || !spots) return showToast('Fill in all event fields.', true);
+
+  const evRegs = (regsCache[eventId] || []).filter(r => !r.waitlisted);
+  const taken = evRegs.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+  if (spots < taken) {
+    if (!confirm(`Heads up: ${taken} spot${taken > 1 ? 's are' : ' is'} already filled, more than the new limit of ${spots}. Existing signups won't be removed, but the event will show as oversold. Continue?`)) return;
+  }
+
+  try {
+    await setDoc(doc(db, 'events', eventId), { name, date, time, location, spots, cost, courts }, { merge: true });
+    closeModal('editEventModal');
+    showToast('Event updated! ✅');
+  } catch (e) {
+    console.error('submitEditEvent error:', e);
+    showToast('Could not update event.', true);
+  }
 }
 
 function cleanOldEvents() {
@@ -2802,6 +2848,7 @@ function renderAdminEvents() {
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <button class="btn btn-outline btn-sm" onclick="showPage('roster');populateRosterSelect();document.getElementById('rosterSelect').value='${ev.id}';renderRoster()">View Roster</button>
+          <button class="btn btn-outline btn-sm" onclick="openEditEventModal('${ev.id}')">✏️ Edit</button>
           <button class="btn btn-danger btn-sm" onclick="deleteEvent('${ev.id}')">Delete</button>
         </div>
       </div>`;
@@ -2871,6 +2918,7 @@ function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
   if (id === 'manageGroupModal') currentManageGroupEventId = null;
+  if (id === 'editEventModal') editingEventId = null;
   if (id === 'bulletinThreadModal') {
     if (unsubReplies) { unsubReplies(); unsubReplies = null; }
     currentThreadPostId = null;
@@ -3124,7 +3172,7 @@ function unlockWaiverCheckbox() {
 
 Object.assign(window, {
   login, login2, register, register2, googleSignIn, logout,
-  addEvent, deleteEvent, openEventSignup, confirmSignup, cancelSignup,
+  addEvent, deleteEvent, openEditEventModal, submitEditEvent, openEventSignup, confirmSignup, cancelSignup,
   openManageGroup, removeGuestFromSignup, cancelSelfFromGroup,
   addGuestRow, removeGuestRow, selectPayment,
   renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleGuestPayment, showPage, openModal, closeModal,
@@ -3139,6 +3187,52 @@ Object.assign(window, {
 });
 </script>
 
+
+<!-- ======================== EDIT EVENT MODAL (admin) ======================== -->
+<div class="modal-overlay" id="editEventModal">
+  <div class="modal" style="position:relative">
+    <button class="modal-close" onclick="closeModal('editEventModal')">✕</button>
+    <h2>Edit Open Gym</h2>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:18px">Update this session's details. Existing signups and the player list stay exactly as they are.</p>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Event Name</label>
+        <input type="text" id="ee-name" placeholder="Monday Open Gym">
+      </div>
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="ee-date">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Time</label>
+        <input type="text" id="ee-time" placeholder="7:00 PM – 9:00 PM">
+      </div>
+      <div class="form-group">
+        <label>Location</label>
+        <input type="text" id="ee-location" placeholder="Oak Lawn Rec Center">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Max Spots</label>
+        <input type="number" id="ee-spots" placeholder="20" min="1">
+      </div>
+      <div class="form-group">
+        <label>Cost per Person ($)</label>
+        <input type="number" id="ee-cost" placeholder="10" min="0" step="0.01">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Courts Available</label>
+        <input type="number" id="ee-courts" placeholder="4" min="1">
+      </div>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="submitEditEvent()" style="margin-top:4px">Save Changes</button>
+  </div>
+</div>
 
 <!-- ======================== ADD PLAYER MODAL (admin) ======================== -->
 <div class="modal-overlay" id="addPlayerModal">
