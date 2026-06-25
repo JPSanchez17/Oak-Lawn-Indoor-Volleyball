@@ -1952,14 +1952,16 @@ async function renderRoster() {
       for (let gi = 0; gi < (r.guests || []).length; gi++) {
         const g = r.guests[gi];
         const gPaid = !!g.paymentReceived;
+        const gPaidLabelId = `gpl-${r.id}-${gi}`;
+        const gPaidRowId = `gpr-${r.id}-${gi}`;
         const gPaidCell = isAdmin ? `<td>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
             <input type="checkbox" ${gPaid ? 'checked' : ''} onchange="adminToggleGuestPayment('${r.id}', '${eventId}', ${gi}, this.checked)"
               style="width:16px;height:16px;accent-color:var(--success);cursor:pointer">
-            <span style="font-size:12px;font-weight:700;color:${gPaid ? 'var(--success)' : 'var(--muted)'}">${gPaid ? '✓ Paid' : 'Pending'}</span>
+            <span id="${gPaidLabelId}" style="font-size:12px;font-weight:700;color:${gPaid ? 'var(--success)' : 'var(--muted)'}">${gPaid ? '✓ Paid' : 'Pending'}</span>
           </label>
         </td>` : '';
-        rows += `<tr style="background:${gPaid && isAdmin ? 'rgba(34,197,94,.04)' : 'rgba(255,255,255,.01)'}">
+        rows += `<tr id="${gPaidRowId}" style="background:${gPaid && isAdmin ? 'rgba(34,197,94,.04)' : 'rgba(255,255,255,.01)'}">
           <td style="color:var(--muted)">${num++}</td>
           <td style="color:var(--muted);padding-left:28px">↳ ${g.name} <span style="font-size:11px;opacity:.6">(guest)</span></td>
           ${isAdmin ? '<td></td>' : ''}
@@ -2065,11 +2067,33 @@ async function adminToggleGuestPayment(regId, eventId, guestIndex, received) {
   const allRegs = regsCache[eventId] || [];
   const reg = allRegs.find(r => r.id === regId);
   if (!reg) return;
+
+  // 1. Patch regsCache immediately so the snapshot re-render sees the same state
+  const newGuests = (reg.guests || []).map((g, i) => i === guestIndex ? { ...g, paymentReceived: received } : g);
+  reg.guests = newGuests;
+
+  // 2. Patch the DOM in-place — no table flicker
+  const labelEl = document.getElementById(`gpl-${regId}-${guestIndex}`);
+  const rowEl   = document.getElementById(`gpr-${regId}-${guestIndex}`);
+  if (labelEl) {
+    labelEl.textContent = received ? '✓ Paid' : 'Pending';
+    labelEl.style.color = received ? 'var(--success)' : 'var(--muted)';
+  }
+  if (rowEl) rowEl.style.background = received ? 'rgba(34,197,94,.04)' : 'rgba(255,255,255,.01)';
+
+  // 3. Persist to Firestore
   try {
-    const newGuests = (reg.guests || []).map((g, i) => i === guestIndex ? { ...g, paymentReceived: received } : g);
     await setDoc(doc(db, 'registrations', regId), { guests: newGuests }, { merge: true });
     showToast(received ? 'Guest payment marked as received.' : 'Guest payment marked as pending.');
   } catch (e) {
+    // Rollback cache + DOM on failure
+    const rollback = newGuests.map((g, i) => i === guestIndex ? { ...g, paymentReceived: !received } : g);
+    reg.guests = rollback;
+    if (labelEl) {
+      labelEl.textContent = !received ? '✓ Paid' : 'Pending';
+      labelEl.style.color = !received ? 'var(--success)' : 'var(--muted)';
+    }
+    if (rowEl) rowEl.style.background = !received ? 'rgba(34,197,94,.04)' : 'rgba(255,255,255,.01)';
     showToast('Could not update guest payment status. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
   }
 }
