@@ -229,16 +229,17 @@
     background: linear-gradient(135deg, var(--fire), var(--gold));
     color: #000;
     border-radius: 8px;
-    padding: 10px 16px;
+    padding: 10px 14px;
     text-align: center;
     font-family: 'Barlow Condensed', sans-serif;
     font-weight: 900;
-    min-width: 70px;
+    min-width: 76px;
   }
 
-  .event-weekday { font-size: 11px; text-transform: uppercase; opacity: .8; letter-spacing: .5px; }
-  .event-month { font-size: 13px; text-transform: uppercase; }
-  .event-day { font-size: 32px; line-height: 1; }
+  .event-weekday { font-size: 11px; text-transform: uppercase; opacity: .75; letter-spacing: .5px; }
+  .event-month { font-size: 15px; text-transform: uppercase; letter-spacing: .5px; }
+  .event-day { font-size: 34px; line-height: 1; }
+  .event-year { font-size: 11px; opacity: .7; letter-spacing: .5px; margin-top: 1px; }
 
   .event-info h3 {
     font-family: 'Barlow Condensed', sans-serif;
@@ -1536,6 +1537,7 @@ function renderSchedule() {
       const weekday = d.toLocaleString('default', { weekday: 'short' }).toUpperCase();
       const month = d.toLocaleString('default', { month: 'short' }).toUpperCase();
       const day = d.getDate();
+      const year = d.getFullYear();
       const evRegs = regsCache[ev.id] || [];
       const mainRegs = evRegs.filter(r => !r.waitlisted);
       const waitRegs = evRegs.filter(r => r.waitlisted).sort((a,b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
@@ -1568,10 +1570,11 @@ function renderSchedule() {
       return `
       <div class="event-card">
         <div style="display:flex;gap:16px;align-items:flex-start">
-          <div class="event-date"><div class="event-weekday">${weekday}</div><div class="event-month">${month}</div><div class="event-day">${day}</div></div>
+          <div class="event-date"><div class="event-weekday">${weekday}</div><div class="event-month">${month}</div><div class="event-day">${day}</div><div class="event-year">${year}</div></div>
           <div class="event-info">
             <h3>${ev.name}</h3>
             <div class="event-meta">
+              <span>📅 ${d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}</span>
               <span>🕐 ${ev.time}</span>
               <span>📍 ${ev.location}</span>
               <span>👥 ${taken}/${ev.spots} spots${waitCount > 0 ? ` · ⏳ ${waitCount} waitlisted` : ''}</span>
