@@ -1247,7 +1247,7 @@
       </label>
     </div>
 
-    <div style="margin-top:16px" id="confirmSection" style="display:none">
+    <div id="confirmSection" style="margin-top:16px;display:none">
       <button class="btn btn-primary btn-full" id="confirmBtn" onclick="confirmSignup()">✅ Confirm My Spot</button>
       <p style="font-size:12px;color:var(--muted);margin-top:10px;text-align:center">Contact Jude at (708) 953-6658 with any payment issues.</p>
     </div>
@@ -1617,22 +1617,29 @@ async function submitEditEvent() {
   }
 }
 
+let _cleanRunning = false;
 function cleanOldEvents() {
   if (!currentUser?.isAdmin) return;
+  if (_cleanRunning) return;
   const today = new Date().toISOString().split('T')[0];
   const old = eventsCache.filter(e => e.date < today);
   if (!old.length) return;
+  _cleanRunning = true;
   (async () => {
-    const batch = writeBatch(db);
-    for (const ev of old) {
-      batch.delete(doc(db, 'events', ev.id));
-      const regsSnap = await getDocs(query(collection(db, 'registrations'), where('eventId', '==', ev.id)));
-      regsSnap.forEach(r => {
-        batch.delete(r.ref);
-        batch.delete(doc(db, 'registrations', r.id, 'private', 'contact'));
-      });
+    try {
+      const batch = writeBatch(db);
+      for (const ev of old) {
+        batch.delete(doc(db, 'events', ev.id));
+        const regsSnap = await getDocs(query(collection(db, 'registrations'), where('eventId', '==', ev.id)));
+        regsSnap.forEach(r => {
+          batch.delete(r.ref);
+          batch.delete(doc(db, 'registrations', r.id, 'private', 'contact'));
+        });
+      }
+      await batch.commit();
+    } finally {
+      _cleanRunning = false;
     }
-    await batch.commit();
   })();
 }
 
@@ -1784,6 +1791,7 @@ function addGuestRow() {
 function removeGuestRow(idx) {
   const row = document.getElementById(`guestRow${idx}`);
   if (row) row.remove();
+  guestCount = Math.max(0, guestCount - 1);
   updatePriceTotal();
 }
 
@@ -3038,6 +3046,8 @@ async function deleteBulletinPost(id) {
 }
 
 // ======================== BULLETIN THREAD (REPLIES) ========================
+const BB_LABELS = { lft: '🙋 Looking for League Team', lfp: '📣 Team Seeking Players', sub: '🔄 Need a League Sub', other: '💬 Other' };
+
 function renderBulletinThreadHeader(p) {
   const date = new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const avatar = avatarHtml(p.avatarUrl || '', 44);
@@ -3145,7 +3155,6 @@ function filterBulletin(filter, btn) {
   renderBulletin();
 }
 
-const BB_LABELS = { lft: '🙋 Looking for League Team', lfp: '📣 Team Seeking Players', sub: '🔄 Need a League Sub', other: '💬 Other' };
 
 async function renderBulletin() {
   const el = document.getElementById('bulletinList');
