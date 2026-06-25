@@ -2047,15 +2047,16 @@ async function renderRoster() {
         ? '<span style="background:rgba(91,111,212,.15);color:var(--sky);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">📱 Venmo/Zelle</span>'
         : '';
       const paid = !!contact.paymentReceived;
+      const paidLabelId = `rpl-${r.id}`;
+      const paidRowId   = `rpr-${r.id}`;
       const paidCell = isAdmin ? `<td>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
-          <input type="checkbox" ${paid ? 'checked' : ''} onchange="adminTogglePayment('${r.id}', this.checked)"
-            style="width:16px;height:16px;accent-color:var(--success);cursor:pointer">
-          <span style="font-size:12px;font-weight:700;color:${paid ? 'var(--success)' : 'var(--muted)'}">${paid ? '✓ Paid' : 'Pending'}</span>
+          <input type="checkbox" ${paid ? 'checked' : ''} onchange="adminTogglePayment(\'${r.id}\', \'${eventId}\', this.checked)"     style="width:16px;height:16px;accent-color:var(--success);cursor:pointer">
+          <span id="${paidLabelId}" style="font-size:12px;font-weight:700;color:${paid ? 'var(--success)' : 'var(--muted)'}">${paid ? '✓ Paid' : 'Pending'}</span>
         </label>
       </td>` : '';
 
-      rows += `<tr style="${paid && isAdmin ? 'background:rgba(34,197,94,.04)' : ''}">
+      rows += `<tr id="${paidRowId}" style="${paid && isAdmin ? 'background:rgba(34,197,94,.04)' : ''}">
         <td style="color:var(--muted)">${num++}</td>
         <td>${r.uid ? `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${r.name}</strong>` : `<strong>${r.name}</strong> <span style="font-size:11px;opacity:.6"></span>`}</td>
         ${isAdmin ? `<td style="color:var(--muted)">${contact.email || '—'}</td>` : ''}
@@ -2174,11 +2175,36 @@ async function adminRemoveGuest(regId, eventId, guestIndex) {
   }
 }
 
-async function adminTogglePayment(regId, received) {
+async function adminTogglePayment(regId, eventId, received) {
+  // 1. Patch regsCache so any snapshot re-render keeps the new state
+  const allRegs = regsCache[eventId] || [];
+  const reg = allRegs.find(r => r.id === regId);
+  if (reg) {
+    if (!reg._contact) reg._contact = {};
+    reg._contact.paymentReceived = received;
+  }
+
+  // 2. Patch the DOM in-place — no table flicker
+  const labelEl = document.getElementById(`rpl-${regId}`);
+  const rowEl   = document.getElementById(`rpr-${regId}`);
+  if (labelEl) {
+    labelEl.textContent = received ? '✓ Paid' : 'Pending';
+    labelEl.style.color = received ? 'var(--success)' : 'var(--muted)';
+  }
+  if (rowEl) rowEl.style.background = received ? 'rgba(34,197,94,.04)' : '';
+
+  // 3. Persist to Firestore
   try {
     await setDoc(doc(db, 'registrations', regId, 'private', 'contact'), { paymentReceived: received }, { merge: true });
     showToast(received ? 'Payment marked as received.' : 'Payment marked as pending.');
   } catch (e) {
+    // Rollback DOM on failure
+    if (reg && reg._contact) reg._contact.paymentReceived = !received;
+    if (labelEl) {
+      labelEl.textContent = !received ? '✓ Paid' : 'Pending';
+      labelEl.style.color = !received ? 'var(--success)' : 'var(--muted)';
+    }
+    if (rowEl) rowEl.style.background = !received ? 'rgba(34,197,94,.04)' : '';
     showToast('Could not update payment status. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
   }
 }
