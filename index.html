@@ -710,13 +710,13 @@
     Oak Lawn Volleyball
   </div>
   <div class="nav-links">
-    <button class="nav-btn active" onclick="showPage('home')">Home</button>
-    <button class="nav-btn" onclick="showPage('rules')">Rules</button>
-    <button class="nav-btn" onclick="showPage('schedule')">Schedule</button>
-    <button class="nav-btn" id="rosterNavBtn" onclick="showPage('roster')">Player List</button>
-    <button class="nav-btn" onclick="showPage('bulletin')">League Board</button>
-    <button class="nav-btn" id="messagesNavBtn" onclick="showPage('messages')" style="display:none">Messages<span id="msgNavBadge" class="msg-badge-dot" style="display:none"></span></button>
-    <button class="nav-btn" id="adminNavBtn" onclick="showPage('admin')" style="display:none">Admin</button>
+    <button class="nav-btn active" data-page="home" onclick="showPage('home')">Home</button>
+    <button class="nav-btn" data-page="rules" onclick="showPage('rules')">Rules</button>
+    <button class="nav-btn" data-page="schedule" onclick="showPage('schedule')">Schedule</button>
+    <button class="nav-btn" data-page="roster" id="rosterNavBtn" onclick="showPage('roster')">Player List</button>
+    <button class="nav-btn" data-page="bulletin" onclick="showPage('bulletin')">League Board</button>
+    <button class="nav-btn" data-page="messages" id="messagesNavBtn" onclick="showPage('messages')" style="display:none">Messages<span id="msgNavBadge" class="msg-badge-dot" style="display:none"></span></button>
+    <button class="nav-btn" data-page="admin" id="adminNavBtn" onclick="showPage('admin')" style="display:none">Admin</button>
   </div>
   <div class="nav-user" id="navUser">
     <button class="btn btn-outline btn-sm" onclick="openModal('loginModal')">Log In</button>
@@ -2905,7 +2905,7 @@ function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
-  document.querySelectorAll('.nav-btn').forEach(b => { if (b.textContent.toLowerCase().includes(name)) b.classList.add('active'); });
+  document.querySelectorAll('.nav-btn').forEach(b => { if (b.dataset.page === name) b.classList.add('active'); });
   if (name === 'schedule') renderSchedule();
   if (name === 'roster') populateRosterSelect();
   if (name === 'admin') { renderAdminEvents(); renderAdminStats(); }
