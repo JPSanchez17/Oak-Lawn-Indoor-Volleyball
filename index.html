@@ -1919,26 +1919,45 @@ async function renderRoster() {
         : contact.paymentMethod === 'venmo'
         ? '<span style="background:rgba(91,111,212,.15);color:var(--sky);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">📱 Venmo/Zelle</span>'
         : '';
+      const paid = !!contact.paymentReceived;
+      const paidCell = isAdmin ? `<td>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
+          <input type="checkbox" ${paid ? 'checked' : ''} onchange="adminTogglePayment('${r.id}', this.checked)"
+            style="width:16px;height:16px;accent-color:var(--success);cursor:pointer">
+          <span style="font-size:12px;font-weight:700;color:${paid ? 'var(--success)' : 'var(--muted)'}">${paid ? '✓ Paid' : 'Pending'}</span>
+        </label>
+      </td>` : '';
 
-      rows += `<tr>
+      rows += `<tr style="${paid && isAdmin ? 'background:rgba(34,197,94,.04)' : ''}">
         <td style="color:var(--muted)">${num++}</td>
         <td><strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${r.name}</strong></td>
         ${isAdmin ? `<td style="color:var(--muted)">${contact.email || '—'}</td>` : ''}
         ${isAdmin ? `<td style="color:var(--muted)">${contact.phone || '—'}</td>` : ''}
         ${isAdmin ? `<td>${payBadge}</td>` : ''}
+        ${paidCell}
         <td style="color:var(--muted);font-size:13px">${r.signedUpAt?.toDate ? r.signedUpAt.toDate().toLocaleDateString() : ''}</td>
         ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemove('${r.id}', '${eventId}', ${r.waitlisted ? 'true' : 'false'})">Remove</button></td>` : ''}
       </tr>`;
 
-      for (const g of (r.guests || [])) {
-        rows += `<tr style="background:rgba(255,255,255,.01)">
+      for (let gi = 0; gi < (r.guests || []).length; gi++) {
+        const g = r.guests[gi];
+        const gPaid = !!g.paymentReceived;
+        const gPaidCell = isAdmin ? `<td>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
+            <input type="checkbox" ${gPaid ? 'checked' : ''} onchange="adminToggleGuestPayment('${r.id}', '${eventId}', ${gi}, this.checked)"
+              style="width:16px;height:16px;accent-color:var(--success);cursor:pointer">
+            <span style="font-size:12px;font-weight:700;color:${gPaid ? 'var(--success)' : 'var(--muted)'}">${gPaid ? '✓ Paid' : 'Pending'}</span>
+          </label>
+        </td>` : '';
+        rows += `<tr style="background:${gPaid && isAdmin ? 'rgba(34,197,94,.04)' : 'rgba(255,255,255,.01)'}">
           <td style="color:var(--muted)">${num++}</td>
           <td style="color:var(--muted);padding-left:28px">↳ ${g.name} <span style="font-size:11px;opacity:.6">(guest)</span></td>
           ${isAdmin ? '<td></td>' : ''}
           ${isAdmin ? '<td></td>' : ''}
           ${isAdmin ? '<td></td>' : ''}
+          ${gPaidCell}
           <td></td>
-          ${isAdmin ? '<td></td>' : ''}
+          ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemoveGuest('${r.id}', '${eventId}', ${gi})">Remove</button></td>` : ''}
         </tr>`;
       }
     }
@@ -1962,6 +1981,7 @@ async function renderRoster() {
           ${isAdmin ? '<th>Email</th>' : ''}
           ${isAdmin ? '<th>Phone</th>' : ''}
           ${isAdmin ? '<th>Payment</th>' : ''}
+          ${isAdmin ? '<th>Paid</th>' : ''}
           <th>Joined</th>
           ${isAdmin ? '<th>Action</th>' : ''}
         </tr></thead>
@@ -1982,6 +2002,7 @@ async function renderRoster() {
           ${isAdmin ? '<th>Email</th>' : ''}
           ${isAdmin ? '<th>Phone</th>' : ''}
           ${isAdmin ? '<th>Payment</th>' : ''}
+          ${isAdmin ? '<th>Paid</th>' : ''}
           <th>Signed Up</th>
           ${isAdmin ? '<th>Action</th>' : ''}
         </tr></thead>
@@ -2002,6 +2023,44 @@ async function adminRemove(regId, eventId, isWaitlisted) {
     showToast('Removed. Waitlist updated.');
   } else {
     showToast('Removed.');
+  }
+}
+
+async function adminRemoveGuest(regId, eventId, guestIndex) {
+  const allRegs = regsCache[eventId] || [];
+  const reg = allRegs.find(r => r.id === regId);
+  if (!reg) return;
+  const guestName = reg.guests?.[guestIndex]?.name || 'this guest';
+  if (!confirm(`Remove ${guestName} from the event?`)) return;
+  try {
+    const newGuests = (reg.guests || []).filter((_, i) => i !== guestIndex);
+    await setDoc(doc(db, 'registrations', regId), { guests: newGuests }, { merge: true });
+    if (!reg.waitlisted) await promoteFromWaitlist(eventId, 1);
+    showToast(`${guestName} removed.`);
+  } catch (e) {
+    showToast('Could not remove guest. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+  }
+}
+
+async function adminTogglePayment(regId, received) {
+  try {
+    await setDoc(doc(db, 'registrations', regId, 'private', 'contact'), { paymentReceived: received }, { merge: true });
+    showToast(received ? 'Payment marked as received.' : 'Payment marked as pending.');
+  } catch (e) {
+    showToast('Could not update payment status. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+  }
+}
+
+async function adminToggleGuestPayment(regId, eventId, guestIndex, received) {
+  const allRegs = regsCache[eventId] || [];
+  const reg = allRegs.find(r => r.id === regId);
+  if (!reg) return;
+  try {
+    const newGuests = (reg.guests || []).map((g, i) => i === guestIndex ? { ...g, paymentReceived: received } : g);
+    await setDoc(doc(db, 'registrations', regId), { guests: newGuests }, { merge: true });
+    showToast(received ? 'Guest payment marked as received.' : 'Guest payment marked as pending.');
+  } catch (e) {
+    showToast('Could not update guest payment status. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
   }
 }
 
@@ -2902,7 +2961,7 @@ Object.assign(window, {
   addEvent, deleteEvent, openEventSignup, confirmSignup, cancelSignup,
   openManageGroup, removeGuestFromSignup, cancelSelfFromGroup,
   addGuestRow, removeGuestRow, selectPayment,
-  renderRoster, adminRemove, showPage, openModal, closeModal,
+  renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleGuestPayment, showPage, openModal, closeModal,
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile,
   saveProfile, handleAvatarUpload, populateRosterSelect,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
