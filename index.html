@@ -1812,7 +1812,7 @@ function addGuestRow() {
 function removeGuestRow(idx) {
   const row = document.getElementById(`guestRow${idx}`);
   if (row) row.remove();
-  guestCount = Math.max(0, guestCount - 1);
+  guestCount = document.querySelectorAll('.guest-row').length;
   updatePriceTotal();
 }
 
@@ -2762,7 +2762,7 @@ async function saveProfile() {
   hidePhoneRequiredBanner();
   showToast('Profile saved! ✅');
   afterLogin();
-  renderEvents();
+  renderSchedule();
 
   // Resume a pending event signup if the user was redirected here to add their phone
   if (pendingSignupEventId) {
@@ -2843,6 +2843,7 @@ async function adminUpdateMemberSkill(uid, skill, name) {
   if (!currentUser?.isAdmin) return;
   try {
     await setDoc(doc(db, 'users', uid), { skill }, { merge: true });
+    if (uid === currentUser.uid) { currentUser.skill = skill; renderSchedule(); }
     showToast(`Updated ${name}'s skill level${skill ? ` to ${skill}` : ''}.`);
   } catch (e) {
     console.error('adminUpdateMemberSkill error:', e);
