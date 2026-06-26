@@ -1673,6 +1673,7 @@ function renderSchedule() {
       const waitCount = waitRegs.length;
 
       let actionBtn = '';
+      const intermediateGated = !!currentUser && isIntermediateEvent(ev) && !meetsIntermediateLevel(currentUser);
       if (myMainSignup) {
         const guestLabel = myMainSignup.guests?.length ? ` +${myMainSignup.guests.length} guest${myMainSignup.guests.length > 1 ? 's' : ''}` : '';
         const hasGuests = myMainSignup.guests?.length > 0;
@@ -1684,6 +1685,8 @@ function renderSchedule() {
       } else if (myWaitlist) {
         actionBtn = `<span class="waitlist-badge">⏳ Waitlist #${waitPos}</span>
                      <button class="btn btn-outline btn-sm" style="margin-top:4px" onclick="cancelSignup('${ev.id}')">Leave Waitlist</button>`;
+      } else if (intermediateGated) {
+        actionBtn = `<span style="color:var(--muted);font-weight:600;font-size:13px">🔒 B Level and above</span>`;
       } else if (full) {
         actionBtn = `<button class="btn btn-waitlist btn-sm" onclick="openEventSignup('${ev.id}')">Join Waitlist${waitCount > 0 ? ` (${waitCount} waiting)` : ''}</button>`;
       } else {
@@ -1695,7 +1698,7 @@ function renderSchedule() {
         <div style="display:flex;gap:16px;align-items:flex-start">
           <div class="event-date"><div class="event-weekday">${weekday}</div><div class="event-month">${month}</div><div class="event-day">${day}</div><div class="event-year">${year}</div></div>
           <div class="event-info">
-            <h3>${ev.name}</h3>
+            <h3>${ev.name}${isIntermediateEvent(ev) ? ' <span style="background:rgba(255,193,7,.15);color:var(--gold);border-radius:100px;padding:2px 10px;font-size:11px;font-weight:700;vertical-align:middle">B LEVEL+</span>' : ''}</h3>
             <div class="event-meta">
               <span>📅 ${d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}</span>
               <span>🕐 ${ev.time}</span>
@@ -1723,6 +1726,18 @@ function renderSchedule() {
 // ======================== EVENT SIGNUP FLOW ========================
 let pendingSignupEventId = null;
 
+// Events with "Intermediate" in the title are restricted to higher-level players.
+// Everyone can still see these events on the schedule — only signing up is gated.
+const INTERMEDIATE_ALLOWED_LEVELS = ['A Level', 'BB Level', 'B Level'];
+
+function isIntermediateEvent(ev) {
+  return !!ev?.name && ev.name.toLowerCase().includes('intermediate');
+}
+
+function meetsIntermediateLevel(user) {
+  return !!user?.skill && INTERMEDIATE_ALLOWED_LEVELS.includes(user.skill);
+}
+
 function openEventSignup(eventId) {
   if (!currentUser) { showToast('Log in or create an account first!', true); openModal('loginModal'); return; }
   if (!currentUser.phone) {
@@ -1730,6 +1745,11 @@ function openEventSignup(eventId) {
     showToast('Please add a phone number to your profile before signing up.', true);
     showPage('profile');
     showPhoneRequiredBanner();
+    return;
+  }
+  const evCheck = eventsCache.find(e => e.id === eventId);
+  if (isIntermediateEvent(evCheck) && !meetsIntermediateLevel(currentUser)) {
+    showToast('This session is for B Level and above. Set your skill level on your profile, or reach out to an organizer if you believe this is a mistake.', true);
     return;
   }
   pendingSignupEventId = null;
@@ -1821,6 +1841,12 @@ async function confirmSignup() {
   if (!document.getElementById('checkWaiver').checked) return showToast('Please read and agree to the Terms and Conditions & Liability Waiver.', true);
   const ev = eventsCache.find(e => e.id === selectedEventId);
   if (!ev) return;
+
+  if (isIntermediateEvent(ev) && !meetsIntermediateLevel(currentUser)) {
+    showToast('This session is for B Level and above.', true);
+    closeModal('eventSignupModal');
+    return;
+  }
 
   const existing = regsCache[selectedEventId] || [];
   if (existing.find(r => r.uid === currentUser.uid)) { showToast("You're already signed up!", true); closeModal('eventSignupModal'); return; }
@@ -2796,7 +2822,13 @@ async function loadAdminMembers() {
                 <td><strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${m.id}')" title="View profile">${m.firstName || ''} ${m.lastName || ''}</strong></td>
                 <td style="color:var(--muted)">${m.email || '—'}</td>
                 <td style="color:var(--gold)">${m.phone || '—'}</td>
-                <td><span style="background:rgba(91,111,212,.15);color:var(--sky);border-radius:4px;padding:2px 8px;font-size:12px">${m.skill || '—'}</span></td>
+                <td><select onchange="adminUpdateMemberSkill('${m.id}', this.value, '${(m.firstName || 'this member').replace(/'/g, "\\'")}')" style="background:var(--card);border:1px solid var(--border);color:var(--sky);border-radius:4px;padding:3px 6px;font-size:12px;font-weight:600">
+                      <option value="" ${!m.skill ? 'selected' : ''}>—</option>
+                      <option value="A Level" ${m.skill === 'A Level' ? 'selected' : ''}>A Level</option>
+                      <option value="BB Level" ${m.skill === 'BB Level' ? 'selected' : ''}>BB Level</option>
+                      <option value="B Level" ${m.skill === 'B Level' ? 'selected' : ''}>B Level</option>
+                      <option value="C Level" ${m.skill === 'C Level' ? 'selected' : ''}>C Level</option>
+                    </select></td>
                 <td style="color:var(--muted);font-size:13px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.bio || '—'}</td>
                 <td>${m.id === currentUser?.uid ? '' : `<button class="btn btn-danger btn-sm" onclick="deleteMember('${m.id}', '${(m.firstName || 'this member').replace(/'/g, "\\'")}')">Delete</button>`}</td>
               </tr>`).join('')}
@@ -2804,6 +2836,18 @@ async function loadAdminMembers() {
         </table></div>
       </div>`;
   } catch (e) { el.innerHTML = '<div class="empty"><p>Could not load members.</p></div>'; }
+}
+
+async function adminUpdateMemberSkill(uid, skill, name) {
+  if (!currentUser?.isAdmin) return;
+  try {
+    await setDoc(doc(db, 'users', uid), { skill }, { merge: true });
+    showToast(`Updated ${name}'s skill level${skill ? ` to ${skill}` : ''}.`);
+  } catch (e) {
+    console.error('adminUpdateMemberSkill error:', e);
+    showToast("Could not update that member's skill level.", true);
+    loadAdminMembers();
+  }
 }
 
 async function deleteMember(uid, name) {
@@ -3243,7 +3287,7 @@ Object.assign(window, {
   addGuestRow, removeGuestRow, selectPayment,
   renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleGuestPayment, showPage, openModal, closeModal,
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile,
-  saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, openIconPicker, selectAvatarIcon,
+  saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, openIconPicker, selectAvatarIcon,
   openAddPlayerModal, submitAddPlayer,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
   openBulletinThread, submitBulletinReply, deleteBulletinReply,
