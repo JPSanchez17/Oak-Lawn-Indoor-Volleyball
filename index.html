@@ -1280,6 +1280,18 @@ const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
 const googleProvider = new GoogleAuthProvider();
 
+// ======================== XSS ESCAPE HELPER ========================
+// Always use he(str) when inserting user-supplied data into innerHTML.
+function he(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const ADMIN_EMAIL = 'judeperryusanchez@gmail.com';
 const ORGANIZER_PHONE = '(708) 953-6658';
 
@@ -1923,7 +1935,7 @@ function openManageGroup(eventId) {
   let html = `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:rgba(34,197,94,.07);border-radius:8px;margin-bottom:8px">
       <div>
-        <div style="font-weight:700;color:var(--text)">${mine.name} <span style="font-size:12px;color:var(--success);font-weight:700">YOU</span></div>
+        <div style="font-weight:700;color:var(--text)">${he(mine.name)} <span style="font-size:12px;color:var(--success);font-weight:700">YOU</span></div>
         <div style="font-size:13px;color:var(--muted)">Primary registrant</div>
       </div>
       <button class="btn btn-danger btn-sm" onclick="cancelSelfFromGroup('${eventId}')">Cancel My Spot</button>
@@ -1933,7 +1945,7 @@ function openManageGroup(eventId) {
     html += `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
       <div>
-        <div style="font-weight:600;color:var(--text)">${g.name}</div>
+        <div style="font-weight:600;color:var(--text)">${he(g.name)}</div>
         <div style="font-size:13px;color:var(--muted)">Guest ${i + 1}</div>
       </div>
       <button class="btn btn-danger btn-sm" onclick="removeGuestFromSignup('${mine.id}', '${eventId}', ${i})">Remove</button>
@@ -2093,9 +2105,9 @@ async function renderRoster() {
 
       rows += `<tr id="${paidRowId}" style="${paid && isAdmin ? 'background:rgba(34,197,94,.04)' : ''}">
         <td style="color:var(--muted)">${num++}</td>
-        <td>${r.uid ? `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${r.name}</strong>` : `<strong>${r.name}</strong> <span style="font-size:11px;opacity:.6"></span>`}</td>
-        ${isAdmin ? `<td style="color:var(--muted)">${contact.email || '—'}</td>` : ''}
-        ${isAdmin ? `<td style="color:var(--muted)">${contact.phone || '—'}</td>` : ''}
+        <td>${r.uid ? `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${he(r.name)}</strong>` : `<strong>${he(r.name)}</strong> <span style="font-size:11px;opacity:.6"></span>`}</td>
+        ${isAdmin ? `<td style="color:var(--muted)">${he(contact.email) || '—'}</td>` : ''}
+        ${isAdmin ? `<td style="color:var(--muted)">${he(contact.phone) || '—'}</td>` : ''}
         ${isAdmin ? `<td>${payBadge}</td>` : ''}
         ${paidCell}
         <td style="color:var(--muted);font-size:13px">${r.signedUpAt?.toDate ? r.signedUpAt.toDate().toLocaleDateString() : ''}</td>
@@ -2116,7 +2128,7 @@ async function renderRoster() {
         </td>` : '';
         rows += `<tr id="${gPaidRowId}" style="background:${gPaid && isAdmin ? 'rgba(34,197,94,.04)' : 'rgba(255,255,255,.01)'}">
           <td style="color:var(--muted)">${num++}</td>
-          <td style="color:var(--muted);padding-left:28px">↳ ${g.name} <span style="font-size:11px;opacity:.6">(guest)</span></td>
+          <td style="color:var(--muted);padding-left:28px">↳ ${he(g.name)} <span style="font-size:11px;opacity:.6">(guest)</span></td>
           ${isAdmin ? '<td></td>' : ''}
           ${isAdmin ? '<td></td>' : ''}
           ${isAdmin ? '<td></td>' : ''}
@@ -2292,7 +2304,7 @@ async function openPlayerProfile(uid) {
 
     const skillEl = document.getElementById('ppSkill');
     skillEl.innerHTML = p.skill
-      ? `<span style="background:rgba(91,111,212,.2);color:var(--sky);border-radius:20px;padding:4px 14px;font-size:13px;font-weight:700">${p.skill}</span>`
+      ? `<span style="background:rgba(91,111,212,.2);color:var(--sky);border-radius:20px;padding:4px 14px;font-size:13px;font-weight:700">${he(p.skill)}</span>`
       : '';
 
     const bioEl = document.getElementById('ppBio');
@@ -2314,8 +2326,8 @@ async function openPlayerProfile(uid) {
           adminContactEl.innerHTML =
             '<div style="color:var(--fire);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">🔒 Admin Info</div>' +
             '<div style="display:flex;flex-direction:column;gap:5px">' +
-              '<div><span style="color:var(--muted);margin-right:6px">Email</span><span style="color:var(--text)">' + email + '</span></div>' +
-              '<div><span style="color:var(--muted);margin-right:6px">Phone</span><span style="color:var(--gold)">' + phone + '</span></div>' +
+              '<div><span style="color:var(--muted);margin-right:6px">Email</span><span style="color:var(--text)">' + he(email) + '</span></div>' +
+              '<div><span style="color:var(--muted);margin-right:6px">Phone</span><span style="color:var(--gold)">' + he(phone) + '</span></div>' +
             '</div>';
           adminContactEl.style.display = '';
         } catch (ce) {
@@ -2527,7 +2539,7 @@ function renderMsgSidebar() {
       const name = `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Player';
       return `<div class="msg-row">
         ${avatarHtmlFor(p)}
-        <div class="msg-row-name">${name}</div>
+        <div class="msg-row-name">${he(name)}</div>
         <div class="msg-row-actions">
           <button class="btn btn-success btn-sm" style="padding:5px 10px" onclick="acceptFriendRequest('${r.from}')">Accept</button>
           <button class="btn btn-outline btn-sm" style="padding:5px 10px" onclick="declineFriendRequest('${r.from}')">✕</button>
@@ -2546,7 +2558,7 @@ function renderMsgSidebar() {
       const name = `${f.firstName || ''} ${f.lastName || ''}`.trim() || 'Player';
       return `<div class="msg-row" onclick="openChatWithFriend('${f.uid}')">
         ${avatarHtmlFor(f)}
-        <div class="msg-row-name">${name}</div>
+        <div class="msg-row-name">${he(name)}</div>
         <div class="msg-row-actions">
           <button class="btn btn-outline btn-sm" style="padding:5px 10px" onclick="event.stopPropagation();removeFriend('${f.uid}')">Remove</button>
         </div>
@@ -2570,7 +2582,7 @@ function renderMsgSidebar() {
     return `<div class="msg-row ${currentChatUid === otherUid ? 'active' : ''}" onclick="openChatWithFriend('${otherUid}')">
       ${avatarHtmlFor(p)}
       <div style="flex:1;min-width:0">
-        <div class="msg-row-name">${name}</div>
+        <div class="msg-row-name">${he(name)}</div>
         <div class="msg-row-preview">${(c.lastMessage || '').replace(/</g, '&lt;')}</div>
       </div>
       ${isUnread ? '<span class="msg-badge-dot">•</span>' : ''}
@@ -2820,9 +2832,9 @@ async function loadAdminMembers() {
             ${members.map(m => `
               <tr>
                 <td>${avatarHtml(m.avatarUrl || '', 36)}</td>
-                <td><strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${m.id}')" title="View profile">${m.firstName || ''} ${m.lastName || ''}</strong></td>
-                <td style="color:var(--muted)">${m.email || '—'}</td>
-                <td style="color:var(--gold)">${m.phone || '—'}</td>
+                <td><strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${m.id}')" title="View profile">${he(m.firstName || '')} ${he(m.lastName || '')}</strong></td>
+                <td style="color:var(--muted)">${he(m.email) || '—'}</td>
+                <td style="color:var(--gold)">${he(m.phone) || '—'}</td>
                 <td><select onchange="adminUpdateMemberSkill('${m.id}', this.value, '${(m.firstName || 'this member').replace(/'/g, "\\'")}')" style="background:var(--card);border:1px solid var(--border);color:var(--sky);border-radius:4px;padding:3px 6px;font-size:12px;font-weight:600">
                       <option value="" ${!m.skill ? 'selected' : ''}>—</option>
                       <option value="A Level" ${m.skill === 'A Level' ? 'selected' : ''}>A Level</option>
@@ -2830,7 +2842,7 @@ async function loadAdminMembers() {
                       <option value="B Level" ${m.skill === 'B Level' ? 'selected' : ''}>B Level</option>
                       <option value="C Level" ${m.skill === 'C Level' ? 'selected' : ''}>C Level</option>
                     </select></td>
-                <td style="color:var(--muted);font-size:13px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.bio || '—'}</td>
+                <td style="color:var(--muted);font-size:13px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${he(m.bio) || '—'}</td>
                 <td>${m.id === currentUser?.uid ? '' : `<button class="btn btn-danger btn-sm" onclick="deleteMember('${m.id}', '${(m.firstName || 'this member').replace(/'/g, "\\'")}')">Delete</button>`}</td>
               </tr>`).join('')}
           </tbody>
@@ -3129,13 +3141,13 @@ function renderBulletinThreadHeader(p) {
       <div style="flex-shrink:0;cursor:pointer" onclick="openPlayerProfile('${p.uid}')">${avatar}</div>
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-          <span class="bb-tag bb-tag-${p.type}">${BB_LABELS[p.type] || p.type}</span>
-          ${p.skill && p.skill !== 'Any' ? `<span style="background:rgba(255,193,7,.1);color:var(--gold);padding:2px 8px;border-radius:100px;font-size:11px;font-weight:700">${p.skill}</span>` : ''}
+          <span class="bb-tag bb-tag-${he(p.type)}">${BB_LABELS[p.type] || he(p.type)}</span>
+          ${p.skill && p.skill !== 'Any' ? `<span style="background:rgba(255,193,7,.1);color:var(--gold);padding:2px 8px;border-radius:100px;font-size:11px;font-weight:700">${he(p.skill)}</span>` : ''}
         </div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;margin-bottom:4px;line-height:1.2">${p.title}</div>
-        ${p.body ? `<div style="color:var(--muted);font-size:14px;line-height:1.55;margin-top:4px;white-space:pre-wrap">${p.body}</div>` : ''}
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;margin-bottom:4px;line-height:1.2">${he(p.title)}</div>
+        ${p.body ? `<div style="color:var(--muted);font-size:14px;line-height:1.55;margin-top:4px;white-space:pre-wrap">${he(p.body)}</div>` : ''}
         <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-          <span style="color:var(--muted);font-size:13px">— <span style="cursor:pointer;text-decoration:underline" onclick="openPlayerProfile('${p.uid}')">${p.name || 'Anonymous'}</span> · ${date}</span>
+          <span style="color:var(--muted);font-size:13px">— <span style="cursor:pointer;text-decoration:underline" onclick="openPlayerProfile('${p.uid}')">${he(p.name || 'Anonymous')}</span> · ${date}</span>
           ${canDelete ? `<button class="btn btn-danger btn-sm" onclick="deleteBulletinPost('${p.id}')">Remove Post</button>` : ''}
         </div>
       </div>
@@ -3185,7 +3197,7 @@ function renderBulletinReplies(replies) {
       <div style="flex-shrink:0;cursor:pointer" onclick="openPlayerProfile('${r.uid}')">${avatar}</div>
       <div style="flex:1;min-width:0;background:rgba(255,255,255,.03);border-radius:10px;padding:8px 12px">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-          <span style="font-weight:700;font-size:13px;cursor:pointer" onclick="openPlayerProfile('${r.uid}')">${r.name || 'Anonymous'}</span>
+          <span style="font-weight:700;font-size:13px;cursor:pointer" onclick="openPlayerProfile('${r.uid}')">${he(r.name || 'Anonymous')}</span>
           ${canDelete ? `<button style="border:none;background:none;color:var(--muted);font-size:12px;cursor:pointer" onclick="deleteBulletinReply('${r.id}')">✕</button>` : ''}
         </div>
         <div style="color:var(--text);font-size:14px;line-height:1.45;white-space:pre-wrap;margin-top:2px">${(r.text || '').replace(/</g, '&lt;')}</div>
@@ -3251,13 +3263,13 @@ async function renderBulletin() {
           <div style="flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();openPlayerProfile('${p.uid}')">${avatar}</div>
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-              <span class="bb-tag bb-tag-${p.type}">${BB_LABELS[p.type] || p.type}</span>
-              ${p.skill && p.skill !== 'Any' ? `<span style="background:rgba(255,193,7,.1);color:var(--gold);padding:2px 8px;border-radius:100px;font-size:11px;font-weight:700">${p.skill}</span>` : ''}
+              <span class="bb-tag bb-tag-${he(p.type)}">${BB_LABELS[p.type] || he(p.type)}</span>
+              ${p.skill && p.skill !== 'Any' ? `<span style="background:rgba(255,193,7,.1);color:var(--gold);padding:2px 8px;border-radius:100px;font-size:11px;font-weight:700">${he(p.skill)}</span>` : ''}
             </div>
-            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;margin-bottom:4px;line-height:1.2">${p.title}</div>
-            ${p.body ? `<div style="color:var(--muted);font-size:14px;line-height:1.55;margin-top:4px;white-space:pre-wrap">${p.body}</div>` : ''}
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;margin-bottom:4px;line-height:1.2">${he(p.title)}</div>
+            ${p.body ? `<div style="color:var(--muted);font-size:14px;line-height:1.55;margin-top:4px;white-space:pre-wrap">${he(p.body)}</div>` : ''}
             <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-              <span style="color:var(--muted);font-size:13px">— <span style="cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();openPlayerProfile('${p.uid}')">${p.name || 'Anonymous'}</span> · ${date} · <span style="color:var(--sky)">💬 View &amp; reply</span></span>
+              <span style="color:var(--muted);font-size:13px">— <span style="cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();openPlayerProfile('${p.uid}')">${he(p.name || 'Anonymous')}</span> · ${date} · <span style="color:var(--sky)">💬 View &amp; reply</span></span>
               ${canDelete ? `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteBulletinPost('${p.id}')">Remove</button>` : ''}
             </div>
           </div>
