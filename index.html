@@ -2275,6 +2275,31 @@ async function openPlayerProfile(uid) {
     profilesCache[uid] = { firstName: p.firstName || '', lastName: p.lastName || '', avatarUrl: p.avatarUrl || '' };
     renderFriendActionButtons(uid);
 
+    // Admin-only contact info
+    const adminContactEl = document.getElementById('ppAdminContact');
+    if (adminContactEl) {
+      if (currentUser?.isAdmin) {
+        try {
+          const contactSnap = await getDoc(doc(db, 'users', uid, 'private', 'contact'));
+          const c = contactSnap.exists() ? contactSnap.data() : {};
+          const email = c.email || '—';
+          const phone = c.phone || '—';
+          adminContactEl.innerHTML =
+            '<div style="color:var(--fire);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">🔒 Admin Info</div>' +
+            '<div style="display:flex;flex-direction:column;gap:5px">' +
+              '<div><span style="color:var(--muted);margin-right:6px">Email</span><span style="color:var(--text)">' + email + '</span></div>' +
+              '<div><span style="color:var(--muted);margin-right:6px">Phone</span><span style="color:var(--gold)">' + phone + '</span></div>' +
+            '</div>';
+          adminContactEl.style.display = '';
+        } catch (ce) {
+          adminContactEl.style.display = 'none';
+        }
+      } else {
+        adminContactEl.style.display = 'none';
+        adminContactEl.innerHTML = '';
+      }
+    }
+
     openModal('playerProfileModal');
   } catch (e) {
     showToast('Could not load profile.', true);
@@ -2767,7 +2792,7 @@ async function loadAdminMembers() {
             ${members.map(m => `
               <tr>
                 <td>${avatarHtml(m.avatarUrl || '', 36)}</td>
-                <td><strong>${m.firstName || ''} ${m.lastName || ''}</strong></td>
+                <td><strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${m.id}')" title="View profile">${m.firstName || ''} ${m.lastName || ''}</strong></td>
                 <td style="color:var(--muted)">${m.email || '—'}</td>
                 <td style="color:var(--gold)">${m.phone || '—'}</td>
                 <td><span style="background:rgba(91,111,212,.15);color:var(--sky);border-radius:4px;padding:2px 8px;font-size:12px">${m.skill || '—'}</span></td>
@@ -3328,6 +3353,7 @@ Object.assign(window, {
       <div id="ppSkill" style="margin-top:6px"></div>
     </div>
     <div id="ppBio" style="color:var(--muted);font-size:15px;line-height:1.6;text-align:left;background:rgba(255,255,255,.03);border-radius:10px;padding:14px;margin-top:8px"></div>
+    <div id="ppAdminContact" style="display:none;text-align:left;background:rgba(255,98,0,.06);border:1px solid rgba(255,98,0,.2);border-radius:10px;padding:12px 14px;margin-top:10px;font-size:13px"></div>
     <div id="ppFriendActions" style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap"></div>
   </div>
 </div>
