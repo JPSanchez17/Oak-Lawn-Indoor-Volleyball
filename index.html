@@ -1722,8 +1722,8 @@ async function submitEditEvent() {
   const location = document.getElementById('ee-location').value.trim();
   const spots = parseInt(document.getElementById('ee-spots').value);
   const cost = parseFloat(document.getElementById('ee-cost').value) || 0;
+  const courts = parseInt(document.getElementById('ee-courts').value) || null;
   const courtInfo = document.getElementById('ee-court-info').value.trim() || null;
-  if (!name || !date || !time || !location || !spots) return showToast('Fill in all event fields.', true);
   if (!name || !date || !time || !location || !spots) return showToast('Fill in all event fields.', true);
 
   const evRegs = (regsCache[eventId] || []).filter(r => !r.waitlisted);
