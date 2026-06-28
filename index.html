@@ -3104,7 +3104,6 @@ function closeModal(id) {
     if (inp) inp.value = '';
     const prev = document.getElementById('photoUploadPreview');
     if (prev) {
-      if (prev.src && prev.src.startsWith('blob:')) URL.revokeObjectURL(prev.src);
       prev.src = ''; prev.style.display = 'none';
     }
     const btn = document.getElementById('photoUploadConfirm');
@@ -3481,9 +3480,9 @@ Object.assign(window, {
               const f=this.files[0];
               if(!f) return;
               const prev=document.getElementById('photoUploadPreview');
-              if(prev.src && prev.src.startsWith('blob:')) URL.revokeObjectURL(prev.src);
-              prev.src=URL.createObjectURL(f);
-              prev.style.display='block';
+              const reader=new FileReader();
+              reader.onload=()=>{ prev.src=reader.result; prev.style.display='block'; };
+              reader.readAsDataURL(f);
               const btn=document.getElementById('photoUploadConfirm');
               btn.disabled=false;
               btn.style.opacity='0.9';
