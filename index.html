@@ -1313,6 +1313,7 @@ let unsubRegistrations = null;
 
 // ======================== FRIENDS / MESSAGES STATE ========================
 let friendsCache = [];           // [{uid, firstName, lastName, avatarUrl}]
+let adminMembersCache = [];      // [{id, firstName, lastName, ...}] - avoids embedding names in inline attrs
 let friendUidSet = new Set();
 let incomingRequests = [];        // [{id, from, createdAt}]
 let outgoingRequests = [];        // [{id, to, createdAt}]
@@ -1616,7 +1617,7 @@ function afterLogin() {
   const navAvatarHtml = avatarHtml(currentUser.avatarUrl, 36, null, `onclick="showPage('profile')" title="My Profile" class="nav-avatar"`);
   document.getElementById('navUser').innerHTML = `
     ${navAvatarHtml}
-    <span style="color:var(--muted);font-size:14px">👋 ${name}</span>
+    <span style="color:var(--muted);font-size:14px">👋 ${he(name)}</span>
     ${currentUser.isAdmin ? '<span class="badge">ADMIN</span>' : ''}
     <button class="btn btn-outline btn-sm" onclick="logout()">Log Out</button>`;
 
@@ -2763,7 +2764,7 @@ function renderChatPanel(uid, convoId) {
   panel.innerHTML = `
     <div class="msg-chat-header">
       ${avatarHtmlFor(p, 32)}
-      <span style="font-weight:700">${name}</span>
+      <span style="font-weight:700">${he(name)}</span>
     </div>
     <div class="msg-chat-body" id="msgChatBody"><div style="color:var(--muted);font-size:13px;text-align:center">Loading messages...</div></div>
     <div class="msg-chat-input">
@@ -2910,6 +2911,7 @@ async function loadAdminMembers() {
     const snap = await getDocs(collection(db, 'users'));
     const members = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (!members.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">👥</div><p>No members yet.</p></div>'; return; }
+    adminMembersCache = members;
 
     await Promise.all(members.map(async m => {
       try {
@@ -2935,7 +2937,7 @@ async function loadAdminMembers() {
                 <td><strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${m.id}')" title="View profile">${he(m.firstName || '')} ${he(m.lastName || '')}</strong></td>
                 <td style="color:var(--muted)">${he(m.email) || '—'}</td>
                 <td style="color:var(--gold)">${he(m.phone) || '—'}</td>
-                <td><select onchange="adminUpdateMemberSkill('${m.id}', this.value, '${(m.firstName || 'this member').replace(/'/g, "\\'")}')" style="background:var(--card);border:1px solid var(--border);color:var(--sky);border-radius:4px;padding:3px 6px;font-size:12px;font-weight:600">
+                <td><select onchange="adminUpdateMemberSkill('${m.id}', this.value)" style="background:var(--card);border:1px solid var(--border);color:var(--sky);border-radius:4px;padding:3px 6px;font-size:12px;font-weight:600">
                       <option value="" ${!m.skill ? 'selected' : ''}>—</option>
                       <option value="A Level" ${m.skill === 'A Level' ? 'selected' : ''}>A Level</option>
                       <option value="BB Level" ${m.skill === 'BB Level' ? 'selected' : ''}>BB Level</option>
@@ -2943,7 +2945,7 @@ async function loadAdminMembers() {
                       <option value="C Level" ${m.skill === 'C Level' ? 'selected' : ''}>C Level</option>
                     </select></td>
                 <td style="color:var(--muted);font-size:13px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${he(m.bio) || '—'}</td>
-                <td>${m.id === currentUser?.uid ? '' : `<button class="btn btn-danger btn-sm" onclick="deleteMember('${m.id}', '${(m.firstName || 'this member').replace(/'/g, "\\'")}')">Delete</button>`}</td>
+                <td>${m.id === currentUser?.uid ? '' : `<button class="btn btn-danger btn-sm" onclick="deleteMember('${m.id}')">Delete</button>`}</td>
               </tr>`).join('')}
           </tbody>
         </table></div>
@@ -2951,8 +2953,9 @@ async function loadAdminMembers() {
   } catch (e) { el.innerHTML = '<div class="empty"><p>Could not load members.</p></div>'; }
 }
 
-async function adminUpdateMemberSkill(uid, skill, name) {
+async function adminUpdateMemberSkill(uid, skill) {
   if (!currentUser?.isAdmin) return;
+  const name = adminMembersCache.find(m => m.id === uid)?.firstName || 'this member';
   try {
     await setDoc(doc(db, 'users', uid), { skill }, { merge: true });
     if (uid === currentUser.uid) { currentUser.skill = skill; renderSchedule(); }
@@ -2964,8 +2967,9 @@ async function adminUpdateMemberSkill(uid, skill, name) {
   }
 }
 
-async function deleteMember(uid, name) {
+async function deleteMember(uid) {
   if (!currentUser?.isAdmin) return;
+  const name = adminMembersCache.find(m => m.id === uid)?.firstName || 'this member';
   if (!confirm(`Delete ${name}'s account data? This permanently removes their profile, bio, photo, and contact info, and cannot be undone. (Note: this does not delete their login itself — if they sign back in, they'll start as a blank new profile.)`)) return;
   try {
     await deleteDoc(doc(db, 'users', uid, 'private', 'contact')).catch(() => {});
