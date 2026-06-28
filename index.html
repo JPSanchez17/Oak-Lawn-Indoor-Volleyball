@@ -2911,6 +2911,11 @@ async function loadAdminMembers() {
     const snap = await getDocs(collection(db, 'users'));
     const members = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (!members.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">👥</div><p>No members yet.</p></div>'; return; }
+    members.sort((a, b) =>
+      `${a.firstName || ''} ${a.lastName || ''}`.trim().localeCompare(
+        `${b.firstName || ''} ${b.lastName || ''}`.trim(), undefined, { sensitivity: 'base' }
+      )
+    );
     adminMembersCache = members;
 
     await Promise.all(members.map(async m => {
