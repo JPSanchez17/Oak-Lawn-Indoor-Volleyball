@@ -996,7 +996,7 @@
       <div style="display:flex;align-items:center;gap:20px;margin-bottom:28px;flex-wrap:wrap">
         <div>
           <div id="profileAvatarDisplay" style="width:100px;height:100px;border-radius:50%;background:linear-gradient(135deg,var(--court),var(--navy));border:2px solid var(--fire);display:flex;align-items:center;justify-content:center;font-size:50px;flex-shrink:0">🏐</div>
-          <button type="button" class="avatar-upload-label" style="border:none;cursor:pointer" onclick="openIconPicker()">Choose Icon</button>
+          <button type="button" class="avatar-upload-label" style="border:none;cursor:pointer" onclick="openIconPicker()">Choose Avatar</button>
         </div>
         <div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:var(--text)" id="profileDisplayName">Your Name</div>
@@ -1265,6 +1265,9 @@ import {
   getFirestore, collection, doc, addDoc, setDoc, getDoc, deleteDoc,
   query, where, getDocs, onSnapshot, orderBy, serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getStorage, ref as storageRef, uploadBytes, getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCmBomAlEnZS4xeQ7uUadvGUK6xyj7adqk",
@@ -1278,6 +1281,7 @@ const firebaseConfig = {
 const fbApp = initializeApp(firebaseConfig);
 const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
+const storage = getStorage(fbApp);
 const googleProvider = new GoogleAuthProvider();
 
 // ======================== XSS ESCAPE HELPER ========================
@@ -1363,7 +1367,7 @@ function avatarHtml(value, size = 36, idAttr = null, extraAttrs = '') {
     }
   }
   if (value) {
-    return `<img${idPart}${extra} src="${value}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:2px solid var(--fire)">`;
+    return `<img${idPart}${extra} src="${he(value)}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:2px solid var(--fire)" onerror="this.style.display='none'">`;
   }
   return `<div${idPart}${extra} style="width:${size}px;height:${size}px;border-radius:50%;background:linear-gradient(135deg,var(--court),var(--navy));border:2px solid var(--fire);display:flex;align-items:center;justify-content:center;font-size:${Math.round(size * 0.5)}px;flex-shrink:0">🏐</div>`;
 }
@@ -1384,7 +1388,30 @@ function renderIconPickerGrid() {
 function openIconPicker() {
   if (!currentUser) return;
   renderIconPickerGrid();
+  switchAvatarTab('icon');
   openModal('iconPickerModal');
+}
+
+function switchAvatarTab(tab) {
+  const iconPanel = document.getElementById('tabIconPanel');
+  const photoPanel = document.getElementById('tabPhotoPanel');
+  const iconBtn = document.getElementById('tabIconBtn');
+  const photoBtn = document.getElementById('tabPhotoBtn');
+  if (tab === 'icon') {
+    iconPanel.style.display = '';
+    photoPanel.style.display = 'none';
+    iconBtn.style.color = 'var(--fire)';
+    iconBtn.style.borderBottomColor = 'var(--fire)';
+    photoBtn.style.color = 'var(--muted)';
+    photoBtn.style.borderBottomColor = 'transparent';
+  } else {
+    iconPanel.style.display = 'none';
+    photoPanel.style.display = '';
+    photoBtn.style.color = 'var(--fire)';
+    photoBtn.style.borderBottomColor = 'var(--fire)';
+    iconBtn.style.color = 'var(--muted)';
+    iconBtn.style.borderBottomColor = 'transparent';
+  }
 }
 
 async function selectAvatarIcon(iconId) {
@@ -1401,6 +1428,35 @@ async function selectAvatarIcon(iconId) {
   } catch (err) {
     console.error('selectAvatarIcon error:', err);
     showToast('Could not update icon.', true);
+  }
+}
+
+async function uploadProfilePhoto(file) {
+  if (!currentUser) return;
+  if (!file) return;
+  const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+  if (!allowedTypes.has(file.type)) { showToast('Please upload a JPG, PNG, GIF, or WebP image.', true); return; }
+  if (file.size > 2 * 1024 * 1024) { showToast('Image must be under 2 MB.', true); return; }
+  const confirmBtn = document.getElementById('photoUploadConfirm');
+  if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.style.opacity = '0.5'; confirmBtn.style.cursor = 'not-allowed'; }
+  // Fixed path per user (no extension) so re-uploads always overwrite the same file
+  // regardless of image format, preventing orphaned files in Storage.
+  const ref = storageRef(storage, `avatars/${currentUser.uid}`);
+  try {
+    showToast('Uploading…');
+    const snapshot = await uploadBytes(ref, file, { contentType: file.type });
+    const url = await getDownloadURL(snapshot.ref);
+    await setDoc(doc(db, 'users', currentUser.uid), { avatarUrl: url }, { merge: true });
+    currentUser.avatarUrl = url;
+    const avatarEl = document.getElementById('profileAvatarDisplay');
+    if (avatarEl) avatarEl.outerHTML = avatarHtml(url, 100, 'profileAvatarDisplay');
+    closeModal('iconPickerModal');
+    showToast('Photo updated! 📸');
+    afterLogin();
+  } catch (err) {
+    console.error('uploadProfilePhoto error:', err);
+    showToast('Upload failed. Please try again.', true);
+    if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.style.opacity = '0.9'; confirmBtn.style.cursor = 'pointer'; }
   }
 }
 
@@ -3043,6 +3099,17 @@ function closeModal(id) {
     if (unsubReplies) { unsubReplies(); unsubReplies = null; }
     currentThreadPostId = null;
   }
+  if (id === 'iconPickerModal') {
+    const inp = document.getElementById('photoUploadInput');
+    if (inp) inp.value = '';
+    const prev = document.getElementById('photoUploadPreview');
+    if (prev) {
+      if (prev.src && prev.src.startsWith('blob:')) URL.revokeObjectURL(prev.src);
+      prev.src = ''; prev.style.display = 'none';
+    }
+    const btn = document.getElementById('photoUploadConfirm');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; btn.style.cursor = 'not-allowed'; }
+  }
 }
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
@@ -3294,7 +3361,7 @@ Object.assign(window, {
   addGuestRow, removeGuestRow, selectPayment,
   renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleGuestPayment, showPage, openModal, closeModal,
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile,
-  saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, openIconPicker, selectAvatarIcon,
+  saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, openIconPicker, selectAvatarIcon, uploadProfilePhoto, switchAvatarTab,
   openAddPlayerModal, submitAddPlayer,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
   openBulletinThread, submitBulletinReply, deleteBulletinReply,
@@ -3379,9 +3446,60 @@ Object.assign(window, {
 <div class="modal-overlay" id="iconPickerModal">
   <div class="modal" style="position:relative;max-width:480px">
     <button class="modal-close" onclick="closeModal('iconPickerModal')">✕</button>
-    <h2>Choose Your Icon</h2>
-    <p style="color:var(--muted);font-size:14px;margin-bottom:18px">Pick a mascot to represent you on the roster and in chat.</p>
-    <div id="iconPickerGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px"></div>
+    <h2>Choose Your Avatar</h2>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:0;margin-bottom:18px;border-bottom:2px solid var(--border)">
+      <button id="tabIconBtn" onclick="switchAvatarTab('icon')"
+        style="flex:1;background:none;border:none;padding:10px 0;font-family:'Barlow',sans-serif;font-size:14px;font-weight:600;cursor:pointer;color:var(--fire);border-bottom:2px solid var(--fire);margin-bottom:-2px;transition:color .15s">
+        🐯 Choose Icon
+      </button>
+      <button id="tabPhotoBtn" onclick="switchAvatarTab('photo')"
+        style="flex:1;background:none;border:none;padding:10px 0;font-family:'Barlow',sans-serif;font-size:14px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s">
+        📷 Upload Photo
+      </button>
+    </div>
+
+    <!-- Icon tab -->
+    <div id="tabIconPanel">
+      <p style="color:var(--muted);font-size:14px;margin-bottom:18px">Pick a mascot to represent you on the roster and in chat.</p>
+      <div id="iconPickerGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px"></div>
+    </div>
+
+    <!-- Upload tab -->
+    <div id="tabPhotoPanel" style="display:none">
+      <p style="color:var(--muted);font-size:14px;margin-bottom:18px">Upload a photo (JPG, PNG, GIF, WebP · max 2 MB).</p>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:16px">
+        <img id="photoUploadPreview" src="" alt="Preview"
+          style="display:none;width:100px;height:100px;border-radius:50%;object-fit:cover;border:2px solid var(--fire)">
+        <label style="cursor:pointer;background:var(--court);border:2px dashed var(--border);border-radius:10px;padding:20px 32px;color:var(--muted);font-size:14px;text-align:center;transition:border-color .15s"
+          onmouseover="this.style.borderColor='var(--fire)'" onmouseout="this.style.borderColor='var(--border)'">
+          📁 Click to choose a file
+          <input type="file" id="photoUploadInput" accept="image/jpeg,image/png,image/gif,image/webp"
+            style="display:none"
+            onchange="
+              const f=this.files[0];
+              if(!f) return;
+              const prev=document.getElementById('photoUploadPreview');
+              if(prev.src && prev.src.startsWith('blob:')) URL.revokeObjectURL(prev.src);
+              prev.src=URL.createObjectURL(f);
+              prev.style.display='block';
+              const btn=document.getElementById('photoUploadConfirm');
+              btn.disabled=false;
+              btn.style.opacity='0.9';
+              btn.style.cursor='pointer';
+            ">
+        </label>
+        <button id="photoUploadConfirm" disabled
+          onclick="uploadProfilePhoto(document.getElementById('photoUploadInput').files[0])"
+          style="width:100%;padding:12px;background:linear-gradient(135deg,var(--fire),var(--gold));border:none;border-radius:8px;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:#000;cursor:not-allowed;opacity:.5;transition:opacity .15s"
+          onmouseover="if(!this.disabled){this.style.opacity='1';this.style.cursor='pointer'}" onmouseout="if(!this.disabled){this.style.opacity='.9';}else{this.style.cursor='not-allowed';}"
+          onfocus="if(!this.disabled)this.style.opacity='1'">
+          Save Photo
+        </button>
+      </div>
+    </div>
+
   </div>
 </div>
 
