@@ -1367,7 +1367,13 @@ function avatarHtml(value, size = 36, idAttr = null, extraAttrs = '') {
     }
   }
   if (value) {
-    return `<img${idPart}${extra} src="${he(value)}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;border:2px solid var(--fire)" onerror="this.style.display='none'">`;
+    // Rounding is applied on this wrapper (not the <img> itself) and the
+    // image fills it at native resolution — putting border-radius directly
+    // on an <img> with object-fit:cover forces a soft anti-aliased clip in
+    // most browsers, which is what was making uploaded photos look blurry.
+    return `<div${idPart}${extra} style="width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;border:2px solid var(--fire);flex-shrink:0;background:var(--card)">
+      <img src="${he(value)}" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'">
+    </div>`;
   }
   return `<div${idPart}${extra} style="width:${size}px;height:${size}px;border-radius:50%;background:linear-gradient(135deg,var(--court),var(--navy));border:2px solid var(--fire);display:flex;align-items:center;justify-content:center;font-size:${Math.round(size * 0.5)}px;flex-shrink:0">🏐</div>`;
 }
@@ -1429,6 +1435,47 @@ async function selectAvatarIcon(iconId) {
     console.error('selectAvatarIcon error:', err);
     showToast('Could not update icon.', true);
   }
+}
+
+// Runs the moment a file is chosen (before "Save Photo" is clicked) so the
+// person gets immediate feedback — e.g. a too-big file — instead of only
+// finding out after they hit save.
+function handlePhotoFileSelect(input) {
+  const f = input.files[0];
+  const prev = document.getElementById('photoUploadPreview');
+  const btn = document.getElementById('photoUploadConfirm');
+  if (!f) return;
+
+  const resetPicker = () => {
+    input.value = '';
+    prev.style.display = 'none';
+    prev.src = '';
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
+    btn.style.cursor = 'not-allowed';
+  };
+
+  const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+  if (!allowedTypes.has(f.type)) {
+    showToast('Please choose a JPG, PNG, GIF, or WebP image.', true);
+    resetPicker();
+    return;
+  }
+
+  const maxBytes = 2 * 1024 * 1024;
+  if (f.size > maxBytes) {
+    const mb = (f.size / (1024 * 1024)).toFixed(1);
+    showToast(`That photo is ${mb} MB — please choose one under 2 MB.`, true);
+    resetPicker();
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => { prev.src = reader.result; prev.style.display = 'block'; };
+  reader.readAsDataURL(f);
+  btn.disabled = false;
+  btn.style.opacity = '0.9';
+  btn.style.cursor = 'pointer';
 }
 
 async function uploadProfilePhoto(file) {
@@ -3360,7 +3407,7 @@ Object.assign(window, {
   addGuestRow, removeGuestRow, selectPayment,
   renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleGuestPayment, showPage, openModal, closeModal,
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile,
-  saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, openIconPicker, selectAvatarIcon, uploadProfilePhoto, switchAvatarTab,
+  saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, openIconPicker, selectAvatarIcon, uploadProfilePhoto, switchAvatarTab, handlePhotoFileSelect,
   openAddPlayerModal, submitAddPlayer,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
   openBulletinThread, submitBulletinReply, deleteBulletinReply,
@@ -3476,18 +3523,7 @@ Object.assign(window, {
           📁 Click to choose a file
           <input type="file" id="photoUploadInput" accept="image/jpeg,image/png,image/gif,image/webp"
             style="display:none"
-            onchange="
-              const f=this.files[0];
-              if(!f) return;
-              const prev=document.getElementById('photoUploadPreview');
-              const reader=new FileReader();
-              reader.onload=()=>{ prev.src=reader.result; prev.style.display='block'; };
-              reader.readAsDataURL(f);
-              const btn=document.getElementById('photoUploadConfirm');
-              btn.disabled=false;
-              btn.style.opacity='0.9';
-              btn.style.cursor='pointer';
-            ">
+            onchange="handlePhotoFileSelect(this)">
         </label>
         <button id="photoUploadConfirm" disabled
           onclick="uploadProfilePhoto(document.getElementById('photoUploadInput').files[0])"
