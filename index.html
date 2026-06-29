@@ -1336,6 +1336,8 @@ let currentManageGroupEventId = null;
 let adminAddPlayerEventId = null;
 let editingEventId = null;
 let rosterSortAlpha = localStorage.getItem('adminRosterSortAlpha') === 'true';
+let rosterContactCache = {};     // contactByRegId — persists across sort toggles
+let rosterContactEventId = null; // which event the contact cache belongs to
 let unsubEvents = null;
 let unsubRegistrations = null;
 
@@ -2213,17 +2215,20 @@ async function renderRoster() {
 
   const isAdmin = currentUser?.isAdmin;
 
-  // Admins need email/phone/payment, which live in a private subcollection
-  const contactByRegId = {};
-  if (isAdmin) {
+  // Admins need email/phone/payment, which live in a private subcollection.
+  // Cache them so toggling sort doesn't re-fetch from Firestore.
+  if (isAdmin && rosterContactEventId !== eventId) {
     el.innerHTML = '<div style="color:var(--muted);padding:12px">Loading roster...</div>';
+    rosterContactCache = {};
+    rosterContactEventId = eventId;
     await Promise.all(allRegs.map(async r => {
       try {
         const snap = await getDoc(doc(db, 'registrations', r.id, 'private', 'contact'));
-        if (snap.exists()) contactByRegId[r.id] = snap.data();
+        if (snap.exists()) rosterContactCache[r.id] = snap.data();
       } catch (e) { /* no contact doc or no access — leave blank */ }
     }));
   }
+  const contactByRegId = isAdmin ? rosterContactCache : {};
 
   function buildRows(regs) {
     let rows = '';
@@ -2324,7 +2329,7 @@ async function renderRoster() {
         <span style="font-weight:600">${totalSpots} / ${ev ? ev.spots : '?'} spots filled</span>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           ${waitRegs.length > 0 ? `<span class="waitlist-badge">⏳ ${waitRegs.length} on waitlist</span>` : ''}
-          ${isAdmin ? `<button class="btn btn-outline btn-sm" style="${sortBtnStyle}" onclick="rosterSortAlpha=!rosterSortAlpha;localStorage.setItem('adminRosterSortAlpha',rosterSortAlpha);renderRoster()" title="Sort A-Z by last name for easy check-in - groups stay together">${sortBtnLabel}</button>` : ''}
+          ${isAdmin ? `<button class="btn btn-outline btn-sm" style="${sortBtnStyle}" onclick="toggleAdminAlphaSort(!rosterSortAlpha,true);renderRoster()" title="Sort A-Z by last name for easy check-in - groups stay together">${sortBtnLabel}</button>` : ''}
           ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openAddPlayerModal()">➕ Add Player</button>` : ''}
         </div>
       </div>
@@ -2348,6 +2353,7 @@ async function adminRemove(regId, eventId, isWaitlisted) {
   if (!confirm('Remove this person?')) return;
   const allRegs = regsCache[eventId] || [];
   const reg = allRegs.find(r => r.id === regId);
+  rosterContactEventId = null; // invalidate cache so next render re-fetches
   await deleteDoc(doc(db, 'registrations', regId, 'private', 'contact')).catch(() => {});
   await deleteDoc(doc(db, 'registrations', regId));
   if (!isWaitlisted && eventId) {
@@ -3074,14 +3080,16 @@ function initAdminSettingsTab() {
   thumb.style.transform = rosterSortAlpha ? 'translateX(20px)' : 'translateX(0)';
 }
 
-function toggleAdminAlphaSort(enabled) {
+function toggleAdminAlphaSort(enabled, silent) {
   rosterSortAlpha = enabled;
   localStorage.setItem('adminRosterSortAlpha', enabled);
+  const checkbox = document.getElementById('adminAlphaSortToggle');
   const track = document.getElementById('adminAlphaSortTrack');
   const thumb = document.getElementById('adminAlphaSortThumb');
+  if (checkbox) checkbox.checked = enabled;
   if (track) track.style.background = enabled ? 'var(--success)' : 'var(--border)';
   if (thumb) thumb.style.transform = enabled ? 'translateX(20px)' : 'translateX(0)';
-  showToast(enabled ? '🔤 Rosters will open A–Z by default.' : '🔢 Rosters will open in sign-up order.');
+  if (!silent) showToast(enabled ? '🔤 Rosters will open A–Z by default.' : '🔢 Rosters will open in sign-up order.');
 }
 
 function switchRulesTab(tab) {
