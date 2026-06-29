@@ -2222,9 +2222,11 @@ async function renderRoster() {
         </label>
       </td>` : '';
 
+      const skillBadge = r.skill ? `<span style="background:rgba(255,193,7,.13);color:var(--gold);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:700;margin-left:6px">${he(r.skill)}</span>` : '';
+      const manualTag = r.manual ? `<span style="font-size:10px;opacity:.45;margin-left:5px">walk-in</span>` : '';
       rows += `<tr id="${paidRowId}" style="${paid && isAdmin ? 'background:rgba(34,197,94,.04)' : ''}">
         <td style="color:var(--muted)">${num++}</td>
-        <td>${r.uid ? `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${he(r.name)}</strong>` : `<strong>${he(r.name)}</strong> <span style="font-size:11px;opacity:.6"></span>`}</td>
+        <td>${r.uid ? `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${he(r.name)}</strong>${skillBadge}` : `<strong>${he(r.name)}</strong>${skillBadge}${manualTag}`}</td>
         ${isAdmin ? `<td style="color:var(--muted)">${he(contact.email) || '—'}</td>` : ''}
         ${isAdmin ? `<td style="color:var(--muted)">${he(contact.phone) || '—'}</td>` : ''}
         ${isAdmin ? `<td>${payBadge}</td>` : ''}
@@ -3014,8 +3016,10 @@ function openAddPlayerModal() {
   const eventId = document.getElementById('rosterSelect')?.value;
   if (!eventId) return showToast('Select an event first.', true);
   adminAddPlayerEventId = eventId;
-  ['apFirst', 'apLast', 'apEmail', 'apPhone'].forEach(id => { document.getElementById(id).value = ''; });
+  // reset form fields
+  ['apFirst','apLast','apEmail','apPhone'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('apPayment').value = '';
+  document.getElementById('apSkill').value = '';
   openModal('addPlayerModal');
 }
 
@@ -3030,6 +3034,7 @@ async function submitAddPlayer() {
   const email = document.getElementById('apEmail').value.trim();
   const phone = document.getElementById('apPhone').value.trim();
   const paymentMethod = document.getElementById('apPayment').value;
+  const skill = document.getElementById('apSkill').value;
   if (!first || !last) return showToast('First and last name are required.', true);
 
   const existing = regsCache[eventId] || [];
@@ -3042,6 +3047,7 @@ async function submitAddPlayer() {
       eventId,
       uid: null,
       name: `${first} ${last}`,
+      skill: skill || null,
       guests: [],
       waitlisted,
       manual: true,
@@ -3513,6 +3519,16 @@ Object.assign(window, {
         <option value="">Select...</option>
         <option value="cash">💵 Cash</option>
         <option value="venmo">📱 Venmo/Zelle</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Skill Level <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+      <select id="apSkill" style="background:var(--card);border:1.5px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;width:100%;font-family:'Barlow',sans-serif;font-size:15px">
+        <option value="">— Not specified —</option>
+        <option value="A Level">A Level</option>
+        <option value="BB Level">BB Level</option>
+        <option value="B Level">B Level</option>
+        <option value="C Level">C Level</option>
       </select>
     </div>
     <button class="btn btn-primary btn-full" onclick="submitAddPlayer()" style="margin-top:4px">Add to Player List</button>
