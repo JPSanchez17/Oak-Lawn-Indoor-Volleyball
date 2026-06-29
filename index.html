@@ -1051,6 +1051,7 @@
     <div class="tabs admin-tabs">
       <button class="tab active" id="admTab1" onclick="switchAdminTab('events')">Events</button>
       <button class="tab" id="admTab2" onclick="switchAdminTab('members')">Members</button>
+      <button class="tab" id="admTab3" onclick="switchAdminTab('settings')">Settings</button>
     </div>
 
     <!-- EVENTS TAB -->
@@ -1110,6 +1111,27 @@
         <div class="section-title" style="font-size:22px;margin:0;">All Members</div>
       </div>
       <div id="adminMembersList"></div>
+    </div>
+
+    <!-- SETTINGS TAB -->
+    <div id="adminTabSettings" style="display:none">
+      <div class="card" style="max-width:520px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--gold);text-transform:uppercase;margin-bottom:18px">⚙️ Roster Settings</div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-weight:700;font-size:15px;color:var(--text)">🔤 Default A–Z Check-in Sort</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:3px">When enabled, rosters open sorted A–Z by last name instead of sign-up order. The button on the Roster page still lets you toggle it per-session.</div>
+          </div>
+          <label style="position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0;cursor:pointer">
+            <input type="checkbox" id="adminAlphaSortToggle" style="opacity:0;width:0;height:0" onchange="toggleAdminAlphaSort(this.checked)">
+            <span id="adminAlphaSortTrack" style="position:absolute;inset:0;border-radius:13px;background:var(--border);transition:background .2s"></span>
+            <span id="adminAlphaSortThumb" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 4px rgba(0,0,0,.3)"></span>
+          </label>
+        </div>
+
+        <div style="margin-top:14px;font-size:12px;color:var(--muted)">Settings are saved to this browser. They apply the next time you open a roster.</div>
+      </div>
     </div>
   </div>
 </div>
@@ -1313,6 +1335,7 @@ let guestCount = 0;
 let currentManageGroupEventId = null;
 let adminAddPlayerEventId = null;
 let editingEventId = null;
+let rosterSortAlpha = localStorage.getItem('adminRosterSortAlpha') === 'true';
 let unsubEvents = null;
 let unsubRegistrations = null;
 
@@ -2260,7 +2283,13 @@ async function renderRoster() {
     return rows;
   }
 
-  const mainRows = buildRows(mainRegs);
+  // Admin alpha-sort: sort by registrant's last name (keeping guests with their group)
+  const getLastName = n => (n || '').trim().split(/\s+/).slice(-1)[0].toLowerCase();
+  const displayMainRegs = isAdmin && rosterSortAlpha
+    ? [...mainRegs].sort((a, b) => getLastName(a.name).localeCompare(getLastName(b.name)))
+    : mainRegs;
+
+  const mainRows = buildRows(displayMainRegs);
 
   let waitlistSection = '';
   if (waitRegs.length > 0) {
@@ -2286,15 +2315,20 @@ async function renderRoster() {
     </div>`;
   }
 
+  const sortBtnLabel = rosterSortAlpha ? '🔢 Sign-up Order' : '🔤 A\u2013Z Check-in';
+  const sortBtnStyle = rosterSortAlpha ? 'border-color:var(--gold);color:var(--gold)' : '';
+
   el.innerHTML = `
     <div class="card" style="padding:0;overflow:hidden">
       <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
         <span style="font-weight:600">${totalSpots} / ${ev ? ev.spots : '?'} spots filled</span>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           ${waitRegs.length > 0 ? `<span class="waitlist-badge">⏳ ${waitRegs.length} on waitlist</span>` : ''}
+          ${isAdmin ? `<button class="btn btn-outline btn-sm" style="${sortBtnStyle}" onclick="rosterSortAlpha=!rosterSortAlpha;localStorage.setItem('adminRosterSortAlpha',rosterSortAlpha);renderRoster()" title="Sort A-Z by last name for easy check-in - groups stay together">${sortBtnLabel}</button>` : ''}
           ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openAddPlayerModal()">➕ Add Player</button>` : ''}
         </div>
       </div>
+      ${isAdmin && rosterSortAlpha ? `<div style="padding:7px 20px;background:rgba(255,193,7,.07);border-bottom:1px solid rgba(255,193,7,.25);font-size:12px;color:var(--gold)">🔤 Sorted A–Z by last name — groups stay together for check-in</div>` : ''}
       <div class="roster-table-wrap"><table class="roster-table">
         <thead><tr>
           <th>#</th><th>Name</th>
@@ -3022,9 +3056,32 @@ async function saveProfile() {
 function switchAdminTab(tab) {
   document.getElementById('adminTabEvents').style.display = tab === 'events' ? '' : 'none';
   document.getElementById('adminTabMembers').style.display = tab === 'members' ? '' : 'none';
+  document.getElementById('adminTabSettings').style.display = tab === 'settings' ? '' : 'none';
   document.getElementById('admTab1').classList.toggle('active', tab === 'events');
   document.getElementById('admTab2').classList.toggle('active', tab === 'members');
+  document.getElementById('admTab3').classList.toggle('active', tab === 'settings');
   if (tab === 'members') loadAdminMembers();
+  if (tab === 'settings') initAdminSettingsTab();
+}
+
+function initAdminSettingsTab() {
+  const checkbox = document.getElementById('adminAlphaSortToggle');
+  const track = document.getElementById('adminAlphaSortTrack');
+  const thumb = document.getElementById('adminAlphaSortThumb');
+  if (!checkbox) return;
+  checkbox.checked = rosterSortAlpha;
+  track.style.background = rosterSortAlpha ? 'var(--success)' : 'var(--border)';
+  thumb.style.transform = rosterSortAlpha ? 'translateX(20px)' : 'translateX(0)';
+}
+
+function toggleAdminAlphaSort(enabled) {
+  rosterSortAlpha = enabled;
+  localStorage.setItem('adminRosterSortAlpha', enabled);
+  const track = document.getElementById('adminAlphaSortTrack');
+  const thumb = document.getElementById('adminAlphaSortThumb');
+  if (track) track.style.background = enabled ? 'var(--success)' : 'var(--border)';
+  if (thumb) thumb.style.transform = enabled ? 'translateX(20px)' : 'translateX(0)';
+  showToast(enabled ? '🔤 Rosters will open A–Z by default.' : '🔢 Rosters will open in sign-up order.');
 }
 
 function switchRulesTab(tab) {
@@ -3654,7 +3711,8 @@ Object.assign(window, {
   openBulletinThread, submitBulletinReply, deleteBulletinReply,
   openWaiverModal, unlockWaiverCheckbox,
   sendFriendRequest, cancelFriendRequest, declineFriendRequest, acceptFriendRequest,
-  removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage, deleteChat
+  removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage, deleteChat,
+  toggleAdminAlphaSort
 });
 </script>
 
