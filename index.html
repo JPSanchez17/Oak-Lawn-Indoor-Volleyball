@@ -1121,7 +1121,7 @@
         <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--border)">
           <div>
             <div style="font-weight:700;font-size:15px;color:var(--text)">🔤 Default A–Z Check-in Sort</div>
-            <div style="font-size:13px;color:var(--muted);margin-top:3px">When enabled, rosters open sorted A–Z by last name instead of sign-up order. The button on the Roster page still lets you toggle it per-session.</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:3px">When enabled, rosters open sorted A–Z by first name instead of sign-up order. The button on the Roster page still lets you toggle it per-session.</div>
           </div>
           <label style="position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0;cursor:pointer">
             <input type="checkbox" id="adminAlphaSortToggle" style="opacity:0;width:0;height:0" onchange="toggleAdminAlphaSort(this.checked)">
@@ -2288,10 +2288,19 @@ async function renderRoster() {
     return rows;
   }
 
-  // Admin alpha-sort: sort by registrant's last name (keeping guests with their group)
-  const getLastName = n => (n || '').trim().split(/\s+/).slice(-1)[0].toLowerCase();
+  // Admin alpha-sort: sort by registrant's last name then first name (keeping guests with their group)
+  const getNameParts = n => {
+    const parts = (n || '').trim().split(/\s+/).filter(Boolean);
+    const lastName = parts.length > 1 ? parts[parts.length - 1] : (parts[0] || '');
+    const firstName = parts.length > 1 ? parts.slice(0, -1).join(' ') : '';
+    return { lastName: lastName.toLowerCase(), firstName: firstName.toLowerCase() };
+  };
   const displayMainRegs = isAdmin && rosterSortAlpha
-    ? [...mainRegs].sort((a, b) => getLastName(a.name).localeCompare(getLastName(b.name)))
+    ? [...mainRegs].sort((a, b) => {
+        const pa = getNameParts(a.name), pb = getNameParts(b.name);
+        const cmp = pa.firstName.localeCompare(pb.firstName, undefined, { sensitivity: 'base' });
+        return cmp !== 0 ? cmp : pa.lastName.localeCompare(pb.lastName, undefined, { sensitivity: 'base' });
+      })
     : mainRegs;
 
   const mainRows = buildRows(displayMainRegs);
@@ -2329,11 +2338,11 @@ async function renderRoster() {
         <span style="font-weight:600">${totalSpots} / ${ev ? ev.spots : '?'} spots filled</span>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           ${waitRegs.length > 0 ? `<span class="waitlist-badge">⏳ ${waitRegs.length} on waitlist</span>` : ''}
-          ${isAdmin ? `<button class="btn btn-outline btn-sm" style="${sortBtnStyle}" onclick="toggleAdminAlphaSort(${!rosterSortAlpha},true);renderRoster()" title="Sort A-Z by last name for easy check-in - groups stay together">${sortBtnLabel}</button>` : ''}
+          ${isAdmin ? `<button class="btn btn-outline btn-sm" style="${sortBtnStyle}" onclick="toggleAdminAlphaSort(${!rosterSortAlpha},true);renderRoster()" title="Sort A-Z by first name for easy check-in - groups stay together">${sortBtnLabel}</button>` : ''}
           ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openAddPlayerModal()">➕ Add Player</button>` : ''}
         </div>
       </div>
-      ${isAdmin && rosterSortAlpha ? `<div style="padding:7px 20px;background:rgba(255,193,7,.07);border-bottom:1px solid rgba(255,193,7,.25);font-size:12px;color:var(--gold)">🔤 Sorted A–Z by last name — groups stay together for check-in</div>` : ''}
+      ${isAdmin && rosterSortAlpha ? `<div style="padding:7px 20px;background:rgba(255,193,7,.07);border-bottom:1px solid rgba(255,193,7,.25);font-size:12px;color:var(--gold)">🔤 Sorted A–Z by first name — groups stay together for check-in</div>` : ''}
       <div class="roster-table-wrap"><table class="roster-table">
         <thead><tr>
           <th>#</th><th>Name</th>
