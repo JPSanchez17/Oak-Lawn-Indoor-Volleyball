@@ -1267,7 +1267,7 @@ import {
   signInWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, doc, addDoc, setDoc, getDoc, deleteDoc,
+  getFirestore, collection, doc, addDoc, setDoc, getDoc, updateDoc, deleteDoc,
   query, where, getDocs, onSnapshot, orderBy, serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
@@ -2362,6 +2362,15 @@ async function adminTogglePayment(regId, eventId, received) {
   // 3. Persist to Firestore
   try {
     await setDoc(doc(db, 'registrations', regId, 'private', 'contact'), { paymentReceived: received }, { merge: true });
+    // Update attendance count for real (non-manual) users
+    if (reg && reg.uid) {
+      try {
+        const userRef = doc(db, 'users', reg.uid);
+        const uSnap = await getDoc(userRef);
+        const current = uSnap.exists() ? (uSnap.data().attendanceCount || 0) : 0;
+        await updateDoc(userRef, { attendanceCount: Math.max(0, current + (received ? 1 : -1)) });
+      } catch (_) {}
+    }
     showToast(received ? 'Payment marked as received.' : 'Payment marked as pending.');
   } catch (e) {
     // Rollback DOM on failure
@@ -2433,6 +2442,16 @@ async function openPlayerProfile(uid) {
     profilesCache[uid] = { firstName: p.firstName || '', lastName: p.lastName || '', avatarUrl: p.avatarUrl || '' };
     renderFriendActionButtons(uid);
 
+    // Attendance count
+    const ppAttEl = document.getElementById('ppAttendance');
+    if (ppAttEl) {
+      const count = p.attendanceCount || 0;
+      ppAttEl.innerHTML = count > 0
+        ? `<span style="color:var(--gold)">🏐</span> <strong style="color:var(--text)">${count}</strong> open gym${count === 1 ? '' : 's'} attended`
+        : '';
+      ppAttEl._uid = uid;
+    }
+
     // Admin-only contact info
     const adminContactEl = document.getElementById('ppAdminContact');
     if (adminContactEl) {
@@ -2442,11 +2461,18 @@ async function openPlayerProfile(uid) {
           const c = contactSnap.exists() ? contactSnap.data() : {};
           const email = c.email || '—';
           const phone = c.phone || '—';
+          const uCount = p.attendanceCount || 0;
           adminContactEl.innerHTML =
             '<div style="color:var(--fire);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">🔒 Admin Info</div>' +
             '<div style="display:flex;flex-direction:column;gap:5px">' +
               '<div><span style="color:var(--muted);margin-right:6px">Email</span><span style="color:var(--text)">' + he(email) + '</span></div>' +
               '<div><span style="color:var(--muted);margin-right:6px">Phone</span><span style="color:var(--gold)">' + he(phone) + '</span></div>' +
+            '</div>' +
+            '<div style="margin-top:10px;display:flex;align-items:center;gap:10px">' +
+              '<span style="color:var(--muted);font-size:12px">Sessions attended</span>' +
+              '<button onclick="adjustAttendance(\'' + uid + '\',-1)" style="background:rgba(255,255,255,.08);border:none;color:var(--text);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:16px;line-height:1">−</button>' +
+              '<span id="ppAdminAttCount" style="font-weight:700;color:var(--text);min-width:24px;text-align:center">' + uCount + '</span>' +
+              '<button onclick="adjustAttendance(\'' + uid + '\',1)" style="background:rgba(255,255,255,.08);border:none;color:var(--text);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:16px;line-height:1">+</button>' +
             '</div>';
           adminContactEl.style.display = '';
         } catch (ce) {
@@ -2491,6 +2517,9 @@ async function openManualPlayerProfile(regId) {
     const bioEl = document.getElementById('ppBio');
     bioEl.style.display = 'none';
 
+    const ppAttElM = document.getElementById('ppAttendance');
+    if (ppAttElM) ppAttElM.innerHTML = '';
+
     const friendEl = document.getElementById('ppFriendActions');
     if (friendEl) friendEl.innerHTML = '';
 
@@ -2522,6 +2551,29 @@ async function openManualPlayerProfile(regId) {
     openModal('playerProfileModal');
   } catch (e) {
     showToast('Could not load profile.', true);
+  }
+}
+
+async function adjustAttendance(uid, delta) {
+  try {
+    const userRef = doc(db, 'users', uid);
+    const snap = await getDoc(userRef);
+    const current = snap.exists() ? (snap.data().attendanceCount || 0) : 0;
+    const next = Math.max(0, current + delta);
+    await updateDoc(userRef, { attendanceCount: next });
+    // Update admin counter in modal
+    const adminCount = document.getElementById('ppAdminAttCount');
+    if (adminCount) adminCount.textContent = next;
+    // Update public display
+    const ppAttEl = document.getElementById('ppAttendance');
+    if (ppAttEl) {
+      ppAttEl.innerHTML = next > 0
+        ? `<span style="color:var(--gold)">🏐</span> <strong style="color:var(--text)">${next}</strong> open gym${next === 1 ? '' : 's'} attended`
+        : '';
+    }
+    showToast(`Sessions updated: ${next}`);
+  } catch (e) {
+    showToast('Could not update attendance count.', true);
   }
 }
 
@@ -3070,16 +3122,85 @@ async function deleteMember(uid) {
   }
 }
 
+let selectedMemberProfile = null;
+
 function openAddPlayerModal() {
   if (!currentUser?.isAdmin) return;
   const eventId = document.getElementById('rosterSelect')?.value;
   if (!eventId) return showToast('Select an event first.', true);
   adminAddPlayerEventId = eventId;
-  // reset form fields
+  // reset new player fields
   ['apFirst','apLast','apEmail','apPhone'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('apPayment').value = '';
   document.getElementById('apSkill').value = '';
+  document.getElementById('apPaymentExisting').value = '';
+  // reset member search
+  clearSelectedMember();
+  document.getElementById('apMemberSearch').value = '';
+  document.getElementById('apMemberResults').style.display = 'none';
+  document.getElementById('apMemberResults').innerHTML = '';
+  // default to existing tab; populate members
+  switchAddPlayerTab('existing');
+  if (!adminMembersCache.length) {
+    getDocs(collection(db, 'users')).then(snap => {
+      adminMembersCache = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.firstName || '').localeCompare(b.firstName || ''));
+    }).catch(() => {});
+  }
   openModal('addPlayerModal');
+}
+
+function switchAddPlayerTab(tab) {
+  const isExisting = tab === 'existing';
+  document.getElementById('apTabExisting').style.display = isExisting ? '' : 'none';
+  document.getElementById('apTabNew').style.display = isExisting ? 'none' : '';
+  document.getElementById('apTabExistingBtn').style.color = isExisting ? 'var(--fire)' : 'var(--muted)';
+  document.getElementById('apTabExistingBtn').style.borderBottomColor = isExisting ? 'var(--fire)' : 'transparent';
+  document.getElementById('apTabNewBtn').style.color = isExisting ? 'var(--muted)' : 'var(--fire)';
+  document.getElementById('apTabNewBtn').style.borderBottomColor = isExisting ? 'transparent' : 'var(--fire)';
+}
+
+function filterMemberSearch() {
+  const q = document.getElementById('apMemberSearch').value.trim().toLowerCase();
+  const resultsEl = document.getElementById('apMemberResults');
+  if (!q) { resultsEl.style.display = 'none'; resultsEl.innerHTML = ''; return; }
+  const matches = adminMembersCache.filter(m => {
+    const full = `${m.firstName || ''} ${m.lastName || ''}`.toLowerCase();
+    return full.includes(q);
+  }).slice(0, 8);
+  if (!matches.length) {
+    resultsEl.innerHTML = '<div style="padding:10px 14px;color:var(--muted);font-size:13px">No members found</div>';
+    resultsEl.style.display = '';
+    return;
+  }
+  resultsEl.innerHTML = matches.map(m => `
+    <div onclick="selectMember('${m.id}')" style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);transition:background .1s" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background=''">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:14px">${he(m.firstName || '')} ${he(m.lastName || '')}</div>
+        ${m.skill ? `<div style="font-size:12px;color:var(--muted)">${he(m.skill)}</div>` : ''}
+      </div>
+    </div>`).join('');
+  resultsEl.style.display = '';
+}
+
+function selectMember(uid) {
+  const m = adminMembersCache.find(x => x.id === uid);
+  if (!m) return;
+  selectedMemberProfile = m;
+  document.getElementById('apMemberSearch').value = '';
+  document.getElementById('apMemberResults').style.display = 'none';
+  const sel = document.getElementById('apSelectedMember');
+  document.getElementById('apSelectedMemberInfo').innerHTML =
+    `<strong>${he(m.firstName || '')} ${he(m.lastName || '')}</strong>${m.skill ? ` · <span style="color:var(--muted);font-size:13px">${he(m.skill)}</span>` : ''}`;
+  sel.style.display = 'flex';
+}
+
+function clearSelectedMember() {
+  selectedMemberProfile = null;
+  const sel = document.getElementById('apSelectedMember');
+  if (sel) sel.style.display = 'none';
+  const info = document.getElementById('apSelectedMemberInfo');
+  if (info) info.innerHTML = '';
 }
 
 async function submitAddPlayer() {
@@ -3088,38 +3209,66 @@ async function submitAddPlayer() {
   const ev = eventsCache.find(e => e.id === eventId);
   if (!eventId || !ev) return showToast('Event not found.', true);
 
-  const first = document.getElementById('apFirst').value.trim();
-  const last = document.getElementById('apLast').value.trim();
-  const email = document.getElementById('apEmail').value.trim();
-  const phone = document.getElementById('apPhone').value.trim();
-  const paymentMethod = document.getElementById('apPayment').value;
-  const skill = document.getElementById('apSkill').value;
-  if (!first || !last) return showToast('First and last name are required.', true);
-
+  const isExistingTab = document.getElementById('apTabExisting').style.display !== 'none';
   const existing = regsCache[eventId] || [];
   const mainExisting = existing.filter(r => !r.waitlisted);
   const taken = mainExisting.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
   const waitlisted = taken >= ev.spots;
 
   try {
-    const regRef = await addDoc(collection(db, 'registrations'), {
-      eventId,
-      uid: null,
-      name: `${first} ${last}`,
-      skill: skill || null,
-      guests: [],
-      waitlisted,
-      manual: true,
-      addedBy: currentUser.uid,
-      signedUpAt: serverTimestamp()
-    });
-    if (email || phone || paymentMethod) {
-      await setDoc(doc(db, 'registrations', regRef.id, 'private', 'contact'), {
-        email: email || '', phone: phone || '', paymentMethod: paymentMethod || ''
+    if (isExistingTab) {
+      // --- Existing member path ---
+      if (!selectedMemberProfile) return showToast('Please select a member first.', true);
+      const m = selectedMemberProfile;
+      const fullName = `${m.firstName || ''} ${m.lastName || ''}`.trim();
+      const paymentMethod = document.getElementById('apPaymentExisting').value;
+      // Check not already registered
+      if (existing.find(r => r.uid === m.id)) return showToast(`${fullName} is already on this event.`, true);
+      const regRef = await addDoc(collection(db, 'registrations'), {
+        eventId,
+        uid: m.id,
+        name: fullName,
+        guests: [],
+        waitlisted,
+        manual: true,
+        addedBy: currentUser.uid,
+        signedUpAt: serverTimestamp()
       });
+      if (paymentMethod) {
+        await setDoc(doc(db, 'registrations', regRef.id, 'private', 'contact'), {
+          email: '', phone: '', paymentMethod
+        });
+      }
+      closeModal('addPlayerModal');
+      showToast(waitlisted ? `${fullName} added to the waitlist.` : `${fullName} added to the player list! ✅`);
+    } else {
+      // --- New player path ---
+      const first = document.getElementById('apFirst').value.trim();
+      const last = document.getElementById('apLast').value.trim();
+      const email = document.getElementById('apEmail').value.trim();
+      const phone = document.getElementById('apPhone').value.trim();
+      const paymentMethod = document.getElementById('apPayment').value;
+      const skill = document.getElementById('apSkill').value;
+      if (!first || !last) return showToast('First and last name are required.', true);
+      const regRef = await addDoc(collection(db, 'registrations'), {
+        eventId,
+        uid: null,
+        name: `${first} ${last}`,
+        skill: skill || null,
+        guests: [],
+        waitlisted,
+        manual: true,
+        addedBy: currentUser.uid,
+        signedUpAt: serverTimestamp()
+      });
+      if (email || phone || paymentMethod) {
+        await setDoc(doc(db, 'registrations', regRef.id, 'private', 'contact'), {
+          email: email || '', phone: phone || '', paymentMethod: paymentMethod || ''
+        });
+      }
+      closeModal('addPlayerModal');
+      showToast(waitlisted ? `${first} ${last} added to the waitlist.` : `${first} ${last} added to the player list! ✅`);
     }
-    closeModal('addPlayerModal');
-    showToast(waitlisted ? `${first} ${last} added to the waitlist.` : `${first} ${last} added to the player list! ✅`);
   } catch (e) {
     console.error('submitAddPlayer error:', e);
     showToast('Could not add player.', true);
@@ -3498,9 +3647,9 @@ Object.assign(window, {
   openManageGroup, removeGuestFromSignup, cancelSelfFromGroup,
   addGuestRow, removeGuestRow, selectPayment,
   renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleGuestPayment, showPage, openModal, closeModal,
-  switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile, openManualPlayerProfile,
+  switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile, openManualPlayerProfile, adjustAttendance,
   saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, openIconPicker, selectAvatarIcon, uploadProfilePhoto, switchAvatarTab, handlePhotoFileSelect,
-  openAddPlayerModal, submitAddPlayer,
+  openAddPlayerModal, submitAddPlayer, switchAddPlayerTab, filterMemberSearch, selectMember, clearSelectedMember,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
   openBulletinThread, submitBulletinReply, deleteBulletinReply,
   openWaiverModal, unlockWaiverCheckbox,
@@ -3565,32 +3714,72 @@ Object.assign(window, {
   <div class="modal" style="position:relative">
     <button class="modal-close" onclick="closeModal('addPlayerModal')">✕</button>
     <h2>Add Player</h2>
-    <p style="color:var(--muted);font-size:14px;margin-bottom:18px">Manually add someone to this event's player list — useful for walk-ins or players who signed up offline. They won't get a login; this just adds them to the roster for this session. If the event is full, they'll be added to the waitlist automatically.</p>
-    <div class="form-row">
-      <div class="form-group"><label>First Name</label><input type="text" id="apFirst" placeholder="Alex"></div>
-      <div class="form-group"><label>Last Name</label><input type="text" id="apLast" placeholder="Johnson"></div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:0;margin-bottom:18px;border-bottom:2px solid var(--border)">
+      <button id="apTabExistingBtn" onclick="switchAddPlayerTab('existing')"
+        style="flex:1;background:none;border:none;padding:10px 0;font-family:'Barlow',sans-serif;font-size:14px;font-weight:600;cursor:pointer;color:var(--fire);border-bottom:2px solid var(--fire);margin-bottom:-2px;transition:color .15s">
+        👤 Existing Member
+      </button>
+      <button id="apTabNewBtn" onclick="switchAddPlayerTab('new')"
+        style="flex:1;background:none;border:none;padding:10px 0;font-family:'Barlow',sans-serif;font-size:14px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s">
+        ✏️ New Player
+      </button>
     </div>
-    <div class="form-group"><label>Email <span style="color:var(--muted);font-weight:400">(optional)</span></label><input type="email" id="apEmail" placeholder="you@email.com"></div>
-    <div class="form-group"><label>Phone <span style="color:var(--muted);font-weight:400">(optional)</span></label><input type="tel" id="apPhone" placeholder="(708) 555-0000"></div>
-    <div class="form-group">
-      <label>Payment Method <span style="color:var(--muted);font-weight:400">(optional)</span></label>
-      <select id="apPayment">
-        <option value="">Select...</option>
-        <option value="cash">💵 Cash</option>
-        <option value="venmo">📱 Venmo/Zelle</option>
-      </select>
+
+    <!-- Existing member tab -->
+    <div id="apTabExisting">
+      <p style="color:var(--muted);font-size:14px;margin-bottom:14px">Search for a registered member and add them to this event.</p>
+      <div class="form-group">
+        <label>Search Member</label>
+        <input type="text" id="apMemberSearch" placeholder="Type a name..." oninput="filterMemberSearch()" autocomplete="off"
+          style="width:100%;background:rgba(255,255,255,.05);border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'Barlow',sans-serif;font-size:14px">
+        <div id="apMemberResults" style="margin-top:6px;max-height:220px;overflow-y:auto;border-radius:8px;border:1px solid var(--border);display:none"></div>
+      </div>
+      <div id="apSelectedMember" style="display:none;background:rgba(255,255,255,.04);border:1.5px solid var(--border);border-radius:8px;padding:10px 14px;margin-top:4px;align-items:center;gap:12px">
+        <div id="apSelectedMemberInfo" style="flex:1;font-size:14px"></div>
+        <button onclick="clearSelectedMember()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1">✕</button>
+      </div>
+      <div class="form-group" style="margin-top:14px">
+        <label>Payment Method <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+        <select id="apPaymentExisting">
+          <option value="">Select...</option>
+          <option value="cash">💵 Cash</option>
+          <option value="venmo">📱 Venmo/Zelle</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="submitAddPlayer()" style="margin-top:4px">Add to Player List</button>
     </div>
-    <div class="form-group">
-      <label>Skill Level <span style="color:var(--muted);font-weight:400">(optional)</span></label>
-      <select id="apSkill" style="background:var(--card);border:1.5px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;width:100%;font-family:'Barlow',sans-serif;font-size:15px">
-        <option value="">— Not specified —</option>
-        <option value="A Level">A Level</option>
-        <option value="BB Level">BB Level</option>
-        <option value="B Level">B Level</option>
-        <option value="C Level">C Level</option>
-      </select>
+
+    <!-- New player tab -->
+    <div id="apTabNew" style="display:none">
+      <p style="color:var(--muted);font-size:14px;margin-bottom:14px">Add a walk-in or offline signup. They won't get a login — this just adds them to the roster for this session.</p>
+      <div class="form-row">
+        <div class="form-group"><label>First Name</label><input type="text" id="apFirst" placeholder="Alex"></div>
+        <div class="form-group"><label>Last Name</label><input type="text" id="apLast" placeholder="Johnson"></div>
+      </div>
+      <div class="form-group"><label>Email <span style="color:var(--muted);font-weight:400">(optional)</span></label><input type="email" id="apEmail" placeholder="you@email.com"></div>
+      <div class="form-group"><label>Phone <span style="color:var(--muted);font-weight:400">(optional)</span></label><input type="tel" id="apPhone" placeholder="(708) 555-0000"></div>
+      <div class="form-group">
+        <label>Payment Method <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+        <select id="apPayment">
+          <option value="">Select...</option>
+          <option value="cash">💵 Cash</option>
+          <option value="venmo">📱 Venmo/Zelle</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Skill Level <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+        <select id="apSkill" style="background:var(--card);border:1.5px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;width:100%;font-family:'Barlow',sans-serif;font-size:15px">
+          <option value="">— Not specified —</option>
+          <option value="A Level">A Level</option>
+          <option value="BB Level">BB Level</option>
+          <option value="B Level">B Level</option>
+          <option value="C Level">C Level</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="submitAddPlayer()" style="margin-top:4px">Add to Player List</button>
     </div>
-    <button class="btn btn-primary btn-full" onclick="submitAddPlayer()" style="margin-top:4px">Add to Player List</button>
   </div>
 </div>
 
@@ -3663,6 +3852,7 @@ Object.assign(window, {
       <div id="ppName" style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:30px;color:var(--text)"></div>
       <div id="ppSkill" style="margin-top:6px"></div>
     </div>
+    <div id="ppAttendance" style="margin-top:8px;font-size:13px;color:var(--muted)"></div>
     <div id="ppBio" style="color:var(--muted);font-size:15px;line-height:1.6;text-align:left;background:rgba(255,255,255,.03);border-radius:10px;padding:14px;margin-top:8px"></div>
     <div id="ppAdminContact" style="display:none;text-align:left;background:rgba(255,98,0,.06);border:1px solid rgba(255,98,0,.2);border-radius:10px;padding:12px 14px;margin-top:10px;font-size:13px"></div>
     <div id="ppFriendActions" style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap"></div>
