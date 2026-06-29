@@ -7,19 +7,19 @@ A web app for the Oak Lawn Indoor Volleyball community to manage open gym signup
 ## What's on the Site
 
 **Schedule**
-Browse upcoming open gym sessions, see available spots, and sign up for a session directly through the site.
+Browse upcoming open gym sessions, see available spots, and sign up directly through the site. Each event shows the location, court details, and a live spot count. Sessions can be skill-restricted (B Level and above) where applicable. If a session is full, you can join the waitlist and get automatically moved up when a spot opens.
 
 **League Board**
-A bulletin board for players and teams to connect. Post that you're looking for a league team, recruit players for your team, find a sub, or browse by skill level (A / B / C).
+A bulletin board for players and teams to connect. Post that you're looking for a league team, recruit players for your team, find a sub, or browse posts filtered by skill level (A / BB / B / C).
 
 **Member Profiles**
-Create an account to manage your profile, track your signups, and appear on event rosters.
+Create an account to set up your profile with a display name, skill level, bio, and profile photo. Your profile is visible to other members on the roster.
 
 **Roster**
-Registered members can view who is signed up for each open gym session and browse player profiles.
+View who is signed up for each open gym session and browse player profiles. Click on any player's name to view their profile.
 
-**Admin**
-Organizers can manage events, view all members, and oversee registrations.
+**Friends & Messaging**
+Add other players as friends from the roster and send direct messages to coordinate for league play or open gym.
 
 ---
 
@@ -29,12 +29,15 @@ Organizers can manage events, view all members, and oversee registrations.
 2. Go to the Schedule and find an open gym
 3. Choose your payment method (Cash or Venmo/Zelle)
 4. Add any guests if needed
-5. Review and agree to the Terms & Conditions and Liability Waiver
+5. Review and agree to the Terms & Liability Waiver
 6. Confirm your spot
+
+> If the session is full, you can join the waitlist. You'll be automatically promoted when a spot opens.
 
 ---
 
 ## Community
+
 - [Facebook](https://www.facebook.com/groups/oaklawnindoorvolleyball)
 - [Instagram](https://www.instagram.com/oaklawnindoorvolleyball/)
 - [Discord](https://discord.gg/2BrPT7zwgS)
