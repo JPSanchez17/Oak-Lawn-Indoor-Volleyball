@@ -2222,11 +2222,9 @@ async function renderRoster() {
         </label>
       </td>` : '';
 
-      const skillBadge = r.skill ? `<span style="background:rgba(255,193,7,.13);color:var(--gold);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:700;margin-left:6px">${he(r.skill)}</span>` : '';
-      const manualTag = '';
       rows += `<tr id="${paidRowId}" style="${paid && isAdmin ? 'background:rgba(34,197,94,.04)' : ''}">
         <td style="color:var(--muted)">${num++}</td>
-        <td>${r.uid ? `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${he(r.name)}</strong>${skillBadge}` : `<strong>${he(r.name)}</strong>${skillBadge}${manualTag}`}</td>
+        <td>${r.uid ? `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${he(r.name)}</strong>` : `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openManualPlayerProfile('${r.id}')" title="View profile">${he(r.name)}</strong>`}</td>
         ${isAdmin ? `<td style="color:var(--muted)">${he(contact.email) || '—'}</td>` : ''}
         ${isAdmin ? `<td style="color:var(--muted)">${he(contact.phone) || '—'}</td>` : ''}
         ${isAdmin ? `<td>${payBadge}</td>` : ''}
@@ -2452,6 +2450,67 @@ async function openPlayerProfile(uid) {
             '</div>';
           adminContactEl.style.display = '';
         } catch (ce) {
+          adminContactEl.style.display = 'none';
+        }
+      } else {
+        adminContactEl.style.display = 'none';
+        adminContactEl.innerHTML = '';
+      }
+    }
+
+    openModal('playerProfileModal');
+  } catch (e) {
+    showToast('Could not load profile.', true);
+  }
+}
+
+async function openManualPlayerProfile(regId) {
+  try {
+    // Find reg from cache
+    let reg = null;
+    for (const regs of Object.values(regsCache)) {
+      reg = regs.find(r => r.id === regId);
+      if (reg) break;
+    }
+    if (!reg) return showToast('Profile not found.', true);
+
+    const nameParts = (reg.name || '').trim().split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    const avatarEl = document.getElementById('ppAvatar');
+    avatarEl.outerHTML = `<div id="ppAvatar" style="display:flex;justify-content:center;margin-bottom:12px">${avatarHtml('', 90)}</div>`;
+
+    document.getElementById('ppName').textContent = reg.name || '';
+
+    const skillEl = document.getElementById('ppSkill');
+    skillEl.innerHTML = reg.skill
+      ? `<span style="background:rgba(91,111,212,.2);color:var(--sky);border-radius:20px;padding:4px 14px;font-size:13px;font-weight:700">${he(reg.skill)}</span>`
+      : '';
+
+    const bioEl = document.getElementById('ppBio');
+    bioEl.style.display = 'none';
+
+    const friendEl = document.getElementById('ppFriendActions');
+    if (friendEl) friendEl.innerHTML = '';
+
+    // Admin-only contact info
+    const adminContactEl = document.getElementById('ppAdminContact');
+    if (adminContactEl) {
+      if (currentUser?.isAdmin) {
+        try {
+          const contactSnap = await getDoc(doc(db, 'registrations', regId, 'private', 'contact'));
+          const c = contactSnap.exists() ? contactSnap.data() : {};
+          const email = c.email || '—';
+          const phone = c.phone || '—';
+          adminContactEl.innerHTML =
+            '<div style="color:var(--fire);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">🔒 Admin Info</div>' +
+            '<div style="display:flex;flex-direction:column;gap:5px">' +
+              '<div><span style="color:var(--muted);margin-right:6px">Email</span><span style="color:var(--text)">' + he(email) + '</span></div>' +
+              '<div><span style="color:var(--muted);margin-right:6px">Phone</span><span style="color:var(--gold)">' + he(phone) + '</span></div>' +
+            '</div>';
+          adminContactEl.style.display = '';
+        } catch {
           adminContactEl.style.display = 'none';
         }
       } else {
@@ -3439,7 +3498,7 @@ Object.assign(window, {
   openManageGroup, removeGuestFromSignup, cancelSelfFromGroup,
   addGuestRow, removeGuestRow, selectPayment,
   renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleGuestPayment, showPage, openModal, closeModal,
-  switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile,
+  switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile, openManualPlayerProfile,
   saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, openIconPicker, selectAvatarIcon, uploadProfilePhoto, switchAvatarTab, handlePhotoFileSelect,
   openAddPlayerModal, submitAddPlayer,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
