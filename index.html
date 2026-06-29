@@ -2329,7 +2329,7 @@ async function renderRoster() {
         <span style="font-weight:600">${totalSpots} / ${ev ? ev.spots : '?'} spots filled</span>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           ${waitRegs.length > 0 ? `<span class="waitlist-badge">⏳ ${waitRegs.length} on waitlist</span>` : ''}
-          ${isAdmin ? `<button class="btn btn-outline btn-sm" style="${sortBtnStyle}" onclick="toggleAdminAlphaSort(!rosterSortAlpha,true);renderRoster()" title="Sort A-Z by last name for easy check-in - groups stay together">${sortBtnLabel}</button>` : ''}
+          ${isAdmin ? `<button class="btn btn-outline btn-sm" style="${sortBtnStyle}" onclick="toggleAdminAlphaSort(${!rosterSortAlpha},true);renderRoster()" title="Sort A-Z by last name for easy check-in - groups stay together">${sortBtnLabel}</button>` : ''}
           ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openAddPlayerModal()">➕ Add Player</button>` : ''}
         </div>
       </div>
