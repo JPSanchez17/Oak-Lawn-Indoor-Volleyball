@@ -914,6 +914,7 @@
             <option value="A Level">A Level</option>
             <option value="B Level">B Level</option>
             <option value="C Level">C Level</option>
+            <option value="Recreational">Recreational</option>
           </select>
         </div>
       </div>
@@ -1028,6 +1029,7 @@
           <option value="BB Level">BB Level</option>
           <option value="B Level">B Level</option>
           <option value="C Level">C Level</option>
+            <option value="Recreational">Recreational</option>
         </select>
       </div>
       <div class="form-group">
@@ -1852,7 +1854,7 @@ function renderSchedule() {
         actionBtn = `<span class="waitlist-badge">⏳ Waitlist #${waitPos}</span>
                      <button class="btn btn-outline btn-sm" style="margin-top:4px" onclick="cancelSignup('${ev.id}')">Leave Waitlist</button>`;
       } else if (intermediateGated) {
-        actionBtn = `<span style="color:var(--muted);font-weight:600;font-size:13px">🔒 B Level and above</span>`;
+        actionBtn = `<button class="btn btn-outline btn-sm" onclick="showToast('This session is for B Level and above. If you are at that level, please update your skill level on your profile. If you believe this is a mistake, reach out to an organizer.', true)">🔒 B Level and above</button>`;
       } else if (full) {
         actionBtn = `<button class="btn btn-waitlist btn-sm" onclick="openEventSignup('${ev.id}')">Join Waitlist${waitCount > 0 ? ` (${waitCount} waiting)` : ''}</button>`;
       } else {
@@ -3412,6 +3414,7 @@ async function loadAdminMembers() {
                       <option value="BB Level" ${m.skill === 'BB Level' ? 'selected' : ''}>BB Level</option>
                       <option value="B Level" ${m.skill === 'B Level' ? 'selected' : ''}>B Level</option>
                       <option value="C Level" ${m.skill === 'C Level' ? 'selected' : ''}>C Level</option>
+                      <option value="Recreational" ${m.skill === 'Recreational' ? 'selected' : ''}>Recreational</option>
                     </select></td>
                 <td style="color:var(--muted);font-size:13px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${he(m.bio) || '—'}</td>
                 <td>${m.id === currentUser?.uid ? '' : `<button class="btn btn-danger btn-sm" onclick="deleteMember('${m.id}')">Delete</button>`}</td>
@@ -4129,6 +4132,7 @@ Object.assign(window, {
           <option value="BB Level">BB Level</option>
           <option value="B Level">B Level</option>
           <option value="C Level">C Level</option>
+            <option value="Recreational">Recreational</option>
         </select>
       </div>
       <div class="form-group">
