@@ -2404,6 +2404,7 @@ async function renderRoster() {
 let squadsPanelOpen = false;
 let squadGroups = [];          // [{ id, memberRegIds: [], manualOverrides: {} }]
 let squadOverrideMap = {};     // regId -> 'confirmed' | 'rejected' for a fuzzy match
+let manualSquadLinks = [];     // [regIdA, regIdB][] — pairs manually linked by an admin
 let lastShuffleEventId = null;
 let lastShuffleTeams = null;
 
@@ -2473,6 +2474,14 @@ function computeSquads(allRegs) {
     }
   }
 
+  // Apply any admin-made manual links (e.g. a player who forgot to tag
+  // squad-mates but was added by an organizer). These always win and
+  // don't need name matching.
+  const regIds = new Set(regs.map(r => r.id));
+  manualSquadLinks.forEach(([a, b]) => {
+    if (regIds.has(a) && regIds.has(b)) union(a, b);
+  });
+
   const groupMap = {};
   regs.forEach(r => {
     const root = find(r.id);
@@ -2499,15 +2508,25 @@ function renderSquadsPanel(eventId) {
     html += `<div style="color:var(--muted);font-size:14px">Nobody has tagged squad-mates for this event yet.</div>`;
   } else {
     html += `<div style="font-weight:700;font-size:14px;margin-bottom:10px">Squads detected (${groups.length})</div>`;
+    const unattached = mainRegs.filter(r => !inSquadIds.has(r.id));
+    const manuallyLinkedIds = new Set(manualSquadLinks.flat());
     groups.forEach((g, i) => {
+      const groupIds = new Set(g.map(r => r.id));
       html += `<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">
         <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(91,111,212,.1)">
           <span style="font-size:13px;font-weight:700;color:var(--sky)">Squad ${i + 1}</span>
-          <span style="font-size:12px;color:var(--muted);margin-left:auto">${g.length} players</span>
+          <span style="font-size:12px;color:var(--muted);margin-left:auto">${g.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0)} players</span>
         </div>
         <div style="padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px">
-          ${g.map(r => `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:4px 10px;font-size:12px">${he(r.name)}</span>`).join('')}
+          ${g.map(r => `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:4px 10px;font-size:12px;display:inline-flex;align-items:center;gap:6px">${he(r.name)}${r.guests?.length ? `<span style="color:var(--muted)">+${r.guests.length}</span>` : ''}${manuallyLinkedIds.has(r.id) ? `<button title="Remove from squad" onclick="removeFromSquad('${eventId}','${r.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0;line-height:1">✕</button>` : ''}</span>`).join('')}
         </div>
+        ${unattached.length > 0 ? `<div style="padding:8px 12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px">
+          <select id="squadAdd_${eventId}_${i}" style="flex:1;min-width:140px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;font-size:12px">
+            <option value="">+ Add a player who forgot to tag in...</option>
+            ${unattached.map(r => `<option value="${r.id}">${he(r.name)}${r.guests?.length ? ` (+${r.guests.length} guest${r.guests.length > 1 ? 's' : ''})` : ''}</option>`).join('')}
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="addToSquad('${eventId}','${g[0].id}', document.getElementById('squadAdd_${eventId}_${i}').value)">Add</button>
+        </div>` : ''}
       </div>`;
     });
 
@@ -2545,6 +2564,17 @@ function renderSquadsPanel(eventId) {
 
 function resolveSquadMatch(eventId, key, decision) {
   squadOverrideMap[key] = decision;
+  renderSquadsPanel(eventId);
+}
+
+function addToSquad(eventId, anchorRegId, newRegId) {
+  if (!newRegId) return showToast('Pick a player to add first.', true);
+  manualSquadLinks.push([anchorRegId, newRegId]);
+  renderSquadsPanel(eventId);
+}
+
+function removeFromSquad(eventId, regId) {
+  manualSquadLinks = manualSquadLinks.filter(([a, b]) => a !== regId && b !== regId);
   renderSquadsPanel(eventId);
 }
 
