@@ -1052,6 +1052,7 @@
     <div class="tabs admin-tabs">
       <button class="tab active" id="admTab1" onclick="switchAdminTab('events')">Events</button>
       <button class="tab" id="admTab2" onclick="switchAdminTab('members')">Members</button>
+      <button class="tab" id="admTab4" onclick="switchAdminTab('activity')">Activity Log</button>
       <button class="tab" id="admTab3" onclick="switchAdminTab('settings')">Settings</button>
     </div>
 
@@ -1116,6 +1117,21 @@
         <div class="section-title" style="font-size:22px;margin:0;">All Members</div>
       </div>
       <div id="adminMembersList"></div>
+    </div>
+
+    <!-- ACTIVITY LOG TAB -->
+    <div id="adminTabActivity" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <div class="section-title" style="font-size:22px;margin:0;">Activity Log</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <select id="activityLogEventFilter" onchange="renderActivityLog()" style="background:rgba(255,255,255,.05);border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:'Barlow',sans-serif;font-size:14px">
+            <option value="">All Events</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="loadActivityLog()">🔄 Refresh</button>
+        </div>
+      </div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Shows the most recent 200 sign-ups, cancellations, waitlist moves, and admin actions across all events.</div>
+      <div id="adminActivityList"></div>
     </div>
 
     <!-- SETTINGS TAB -->
@@ -1303,7 +1319,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, addDoc, setDoc, getDoc, updateDoc, deleteDoc,
-  query, where, getDocs, onSnapshot, orderBy, serverTimestamp, writeBatch
+  query, where, getDocs, onSnapshot, orderBy, limit, serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getStorage, ref as storageRef, uploadBytes, getDownloadURL
@@ -1353,10 +1369,12 @@ let rosterContactCache = {};     // contactByRegId — persists across sort togg
 let rosterContactEventId = null; // which event the contact cache belongs to
 let unsubEvents = null;
 let unsubRegistrations = null;
+let unsubActivityLog = null;
 
 // ======================== FRIENDS / MESSAGES STATE ========================
 let friendsCache = [];           // [{uid, firstName, lastName, avatarUrl}]
 let adminMembersCache = [];      // [{id, firstName, lastName, ...}] - avoids embedding names in inline attrs
+let activityLogCache = [];       // [{id, type, eventId, eventName, name, actor, guests, timestamp}]
 let friendUidSet = new Set();
 let incomingRequests = [];        // [{id, from, createdAt}]
 let outgoingRequests = [];        // [{id, to, createdAt}]
@@ -2072,6 +2090,7 @@ async function confirmSignup() {
       paymentMethod: selectedPayment
     });
     closeModal('eventSignupModal');
+    logActivity(selectedEventId, 'waitlist_join', { name: `${currentUser.firstName} ${currentUser.lastName}`, uid: currentUser.uid, actor: 'self' });
     showToast(`Added to the waitlist! We'll move you up if a spot opens. 🏐`);
     return;
   }
@@ -2094,6 +2113,7 @@ async function confirmSignup() {
   });
 
   closeModal('eventSignupModal');
+  logActivity(selectedEventId, 'signup', { name: `${currentUser.firstName} ${currentUser.lastName}`, uid: currentUser.uid, actor: 'self', guests: guests.map(g => g.name) });
   showToast(`You're on the roster! See you there 🏐`);
 }
 
@@ -2173,6 +2193,7 @@ async function cancelSelfFromGroup(eventId) {
     closeModal('manageGroupModal');
     await deleteDoc(doc(db, 'registrations', mine.id, 'private', 'contact')).catch(() => {});
     await deleteDoc(doc(db, 'registrations', mine.id));
+    logActivity(eventId, 'cancel', { name: mine.name, uid: mine.uid, actor: 'self', guests: (mine.guests || []).map(g => g.name) });
     const spotsFreed = 1 + (mine.guests?.length || 0);
     await promoteFromWaitlist(eventId, spotsFreed);
     showToast('Your spot has been cancelled.');
@@ -2202,9 +2223,31 @@ async function promoteFromWaitlist(eventId, spotsCount = 1) {
       // entries onto the main list.
       await updateDoc(doc(db, 'registrations', w.id), { waitlisted: false });
       promoted++;
+      logActivity(eventId, 'promoted', { name: w.name, uid: w.uid, actor: 'system' });
     } catch (e) {
       console.warn('Skipping stale waitlist entry (likely already canceled):', w.id, e);
     }
+  }
+}
+
+// Writes an entry to the admin activity log. Fire-and-forget: failures here
+// (e.g. a Firestore rules mismatch) are logged to console but never block
+// the signup/cancel flow that triggered them.
+async function logActivity(eventId, type, details = {}) {
+  try {
+    const ev = eventsCache.find(e => e.id === eventId);
+    await addDoc(collection(db, 'activityLog'), {
+      eventId: eventId || null,
+      eventName: ev?.name || 'Unknown Event',
+      type,
+      name: details.name || 'Unknown',
+      uid: details.uid || null,
+      actor: details.actor || 'self',
+      guests: details.guests || [],
+      timestamp: serverTimestamp()
+    });
+  } catch (e) {
+    console.warn('logActivity failed (non-critical):', e);
   }
 }
 
@@ -2222,10 +2265,12 @@ async function cancelSignup(eventId) {
   await deleteDoc(doc(db, 'registrations', mine.id));
 
   if (wasMain) {
+    logActivity(eventId, 'cancel', { name: mine.name, uid: mine.uid, actor: 'self', guests: (mine.guests || []).map(g => g.name) });
     const spotsFreed = 1 + (mine.guests?.length || 0);
     await promoteFromWaitlist(eventId, spotsFreed);
     showToast('Spot cancelled. Next waitlisted player has been moved up.');
   } else {
+    logActivity(eventId, 'waitlist_leave', { name: mine.name, uid: mine.uid, actor: 'self' });
     showToast('You have been removed from the waitlist.');
   }
 }
@@ -2639,6 +2684,7 @@ async function adminRemove(regId, eventId, isWaitlisted) {
   rosterContactEventId = null; // invalidate cache so next render re-fetches
   await deleteDoc(doc(db, 'registrations', regId, 'private', 'contact')).catch(() => {});
   await deleteDoc(doc(db, 'registrations', regId));
+  logActivity(eventId, isWaitlisted ? 'admin_remove_waitlist' : 'admin_remove', { name: reg?.name || 'Unknown', uid: reg?.uid, actor: 'admin', guests: (reg?.guests || []).map(g => g.name) });
   if (!isWaitlisted && eventId) {
     const spotsFreed = 1 + (reg?.guests?.length || 0);
     await promoteFromWaitlist(eventId, spotsFreed);
@@ -3345,12 +3391,100 @@ async function saveProfile() {
 function switchAdminTab(tab) {
   document.getElementById('adminTabEvents').style.display = tab === 'events' ? '' : 'none';
   document.getElementById('adminTabMembers').style.display = tab === 'members' ? '' : 'none';
+  document.getElementById('adminTabActivity').style.display = tab === 'activity' ? '' : 'none';
   document.getElementById('adminTabSettings').style.display = tab === 'settings' ? '' : 'none';
   document.getElementById('admTab1').classList.toggle('active', tab === 'events');
   document.getElementById('admTab2').classList.toggle('active', tab === 'members');
+  document.getElementById('admTab4').classList.toggle('active', tab === 'activity');
   document.getElementById('admTab3').classList.toggle('active', tab === 'settings');
   if (tab === 'members') loadAdminMembers();
+  if (tab === 'activity') loadActivityLog();
   if (tab === 'settings') initAdminSettingsTab();
+  // Stop listening for live activity-log updates once the admin switches
+  // to a different admin sub-tab (leaving the Admin page entirely is
+  // handled separately in showPage), so we're not paying for background
+  // reads on every other tab.
+  if (tab !== 'activity' && unsubActivityLog) { unsubActivityLog(); unsubActivityLog = null; }
+}
+
+// ======================== ACTIVITY LOG ========================
+const ACTIVITY_TYPE_META = {
+  signup:               { icon: '✅', label: 'Signed up' },
+  waitlist_join:        { icon: '⏳', label: 'Joined waitlist' },
+  waitlist_leave:       { icon: '🚪', label: 'Left waitlist' },
+  cancel:               { icon: '❌', label: 'Cancelled spot' },
+  promoted:             { icon: '⬆️', label: 'Promoted from waitlist' },
+  admin_add:            { icon: '👤', label: 'Added by admin' },
+  admin_add_waitlist:   { icon: '👤', label: 'Added to waitlist by admin' },
+  admin_remove:         { icon: '🗑️', label: 'Removed by admin' },
+  admin_remove_waitlist:{ icon: '🗑️', label: 'Removed from waitlist by admin' }
+};
+
+function loadActivityLog() {
+  const el = document.getElementById('adminActivityList');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--muted);padding:12px">Loading...</div>';
+
+  if (unsubActivityLog) { unsubActivityLog(); unsubActivityLog = null; }
+
+  try {
+    const q = query(collection(db, 'activityLog'), orderBy('timestamp', 'desc'), limit(200));
+    unsubActivityLog = onSnapshot(q, (snap) => {
+      activityLogCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      populateActivityEventFilter();
+      renderActivityLog();
+    }, (e) => {
+      console.error('Activity log listener error:', e);
+      el.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>Could not load the activity log. ${e.code === 'permission-denied' ? 'Permission denied — check Firestore rules for the activityLog collection.' : 'Try refreshing.'}</p></div>`;
+    });
+  } catch (e) {
+    console.error('loadActivityLog error:', e);
+    el.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><p>Could not load the activity log.</p></div>';
+  }
+}
+
+function populateActivityEventFilter() {
+  const sel = document.getElementById('activityLogEventFilter');
+  if (!sel) return;
+  const current = sel.value;
+  const seen = new Map();
+  activityLogCache.forEach(a => { if (a.eventId && !seen.has(a.eventId)) seen.set(a.eventId, a.eventName || 'Unknown Event'); });
+  let html = '<option value="">All Events</option>';
+  for (const [id, name] of seen) html += `<option value="${id}">${he(name)}</option>`;
+  sel.innerHTML = html;
+  if (current && seen.has(current)) sel.value = current;
+}
+
+function renderActivityLog() {
+  const el = document.getElementById('adminActivityList');
+  if (!el) return;
+  const filterEventId = document.getElementById('activityLogEventFilter')?.value || '';
+  const entries = filterEventId ? activityLogCache.filter(a => a.eventId === filterEventId) : activityLogCache;
+
+  if (!entries.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>No activity yet.</p></div>';
+    return;
+  }
+
+  el.innerHTML = entries.map(a => {
+    const meta = ACTIVITY_TYPE_META[a.type] || { icon: '•', label: a.type || 'Activity' };
+    const when = a.timestamp?.seconds
+      ? new Date(a.timestamp.seconds * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+      : 'Just now';
+    const guestNote = a.guests?.length ? ` <span style="color:var(--muted)">+${a.guests.length} guest${a.guests.length > 1 ? 's' : ''}</span>` : '';
+    const actorNote = a.actor === 'admin' ? ' <span class="badge" style="font-size:10px">ADMIN</span>' : a.actor === 'system' ? ' <span style="font-size:11px;color:var(--muted)">(auto)</span>' : '';
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:12px;min-width:0">
+          <span style="font-size:20px;flex-shrink:0">${meta.icon}</span>
+          <div style="min-width:0">
+            <div style="font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${he(a.name)}${guestNote}${actorNote}</div>
+            <div style="font-size:13px;color:var(--muted)">${meta.label} — ${he(a.eventName || 'Unknown Event')}</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0">${when}</div>
+      </div>`;
+  }).join('');
 }
 
 function initAdminSettingsTab() {
@@ -3593,6 +3727,7 @@ async function submitAddPlayer() {
         });
       }
       closeModal('addPlayerModal');
+      logActivity(eventId, waitlisted ? 'admin_add_waitlist' : 'admin_add', { name: fullName, uid: m.id, actor: 'admin' });
       showToast(waitlisted ? `${fullName} added to the waitlist.` : `${fullName} added to the player list! ✅`);
     } else {
       // --- New player path ---
@@ -3623,6 +3758,7 @@ async function submitAddPlayer() {
         });
       }
       closeModal('addPlayerModal');
+      logActivity(eventId, waitlisted ? 'admin_add_waitlist' : 'admin_add', { name: `${first} ${last}`, uid: null, actor: 'admin' });
       showToast(waitlisted ? `${first} ${last} added to the waitlist.` : `${first} ${last} added to the player list! ✅`);
     }
   } catch (e) {
@@ -3690,6 +3826,7 @@ function showPage(name) {
   if (name === 'schedule') renderSchedule();
   if (name === 'roster') populateRosterSelect();
   if (name === 'admin') { renderAdminEvents(); renderAdminStats(); }
+  else if (unsubActivityLog) { unsubActivityLog(); unsubActivityLog = null; }
   if (name === 'profile') {
     loadProfile();
     if (currentUser && !currentUser.phone) showPhoneRequiredBanner();
@@ -4012,7 +4149,8 @@ Object.assign(window, {
   sendFriendRequest, cancelFriendRequest, declineFriendRequest, acceptFriendRequest,
   removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage, deleteChat,
   toggleAdminAlphaSort,
-  renderSquadChips, toggleSquadsPanel, resolveSquadMatch, shuffleTeams
+  renderSquadChips, toggleSquadsPanel, resolveSquadMatch, shuffleTeams,
+  loadActivityLog, renderActivityLog
 });
 </script>
 
