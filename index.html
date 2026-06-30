@@ -1052,7 +1052,6 @@
     <div class="tabs admin-tabs">
       <button class="tab active" id="admTab1" onclick="switchAdminTab('events')">Events</button>
       <button class="tab" id="admTab2" onclick="switchAdminTab('members')">Members</button>
-      <button class="tab" id="admTab4" onclick="switchAdminTab('activity')">Activity Log</button>
       <button class="tab" id="admTab3" onclick="switchAdminTab('settings')">Settings</button>
     </div>
 
@@ -1119,25 +1118,18 @@
       <div id="adminMembersList"></div>
     </div>
 
-    <!-- ACTIVITY LOG TAB -->
-    <div id="adminTabActivity" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-        <div class="section-title" style="font-size:22px;margin:0;">Activity Log</div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <select id="activityLogEventFilter" onchange="renderActivityLog()" style="background:rgba(255,255,255,.05);border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:'Barlow',sans-serif;font-size:14px">
-            <option value="">All Events</option>
-          </select>
-          <button class="btn btn-outline btn-sm" onclick="loadActivityLog()">🔄 Refresh</button>
-        </div>
-      </div>
-      <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Shows the most recent 200 sign-ups, cancellations, waitlist moves, and admin actions across all events.</div>
-      <div id="adminActivityList"></div>
-    </div>
-
     <!-- SETTINGS TAB -->
     <div id="adminTabSettings" style="display:none">
       <div class="card" style="max-width:520px">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--gold);text-transform:uppercase;margin-bottom:18px">⚙️ Roster Settings</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:20px;color:var(--gold);text-transform:uppercase;margin-bottom:18px">⚙️ Admin Settings</div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-weight:700;font-size:15px;color:var(--text)">📋 Activity Log</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:3px">View the most recent 200 sign-ups, cancellations, waitlist moves, and admin actions across all events.</div>
+          </div>
+          <button class="btn btn-outline btn-sm" style="flex-shrink:0" onclick="openActivityLogModal()">View Log</button>
+        </div>
 
         <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--border)">
           <div>
@@ -3391,20 +3383,17 @@ async function saveProfile() {
 function switchAdminTab(tab) {
   document.getElementById('adminTabEvents').style.display = tab === 'events' ? '' : 'none';
   document.getElementById('adminTabMembers').style.display = tab === 'members' ? '' : 'none';
-  document.getElementById('adminTabActivity').style.display = tab === 'activity' ? '' : 'none';
   document.getElementById('adminTabSettings').style.display = tab === 'settings' ? '' : 'none';
   document.getElementById('admTab1').classList.toggle('active', tab === 'events');
   document.getElementById('admTab2').classList.toggle('active', tab === 'members');
-  document.getElementById('admTab4').classList.toggle('active', tab === 'activity');
   document.getElementById('admTab3').classList.toggle('active', tab === 'settings');
   if (tab === 'members') loadAdminMembers();
-  if (tab === 'activity') loadActivityLog();
   if (tab === 'settings') initAdminSettingsTab();
-  // Stop listening for live activity-log updates once the admin switches
-  // to a different admin sub-tab (leaving the Admin page entirely is
-  // handled separately in showPage), so we're not paying for background
-  // reads on every other tab.
-  if (tab !== 'activity' && unsubActivityLog) { unsubActivityLog(); unsubActivityLog = null; }
+}
+
+function openActivityLogModal() {
+  openModal('activityLogModal');
+  loadActivityLog();
 }
 
 // ======================== ACTIVITY LOG ========================
@@ -3826,7 +3815,7 @@ function showPage(name) {
   if (name === 'schedule') renderSchedule();
   if (name === 'roster') populateRosterSelect();
   if (name === 'admin') { renderAdminEvents(); renderAdminStats(); }
-  else if (unsubActivityLog) { unsubActivityLog(); unsubActivityLog = null; }
+  else { closeModal('activityLogModal'); }
   if (name === 'profile') {
     loadProfile();
     if (currentUser && !currentUser.phone) showPhoneRequiredBanner();
@@ -3876,6 +3865,7 @@ function closeModal(id) {
   document.getElementById(id).classList.remove('open');
   if (id === 'manageGroupModal') currentManageGroupEventId = null;
   if (id === 'editEventModal') editingEventId = null;
+  if (id === 'activityLogModal' && unsubActivityLog) { unsubActivityLog(); unsubActivityLog = null; }
   if (id === 'bulletinThreadModal') {
     if (unsubReplies) { unsubReplies(); unsubReplies = null; }
     currentThreadPostId = null;
@@ -4150,10 +4140,28 @@ Object.assign(window, {
   removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage, deleteChat,
   toggleAdminAlphaSort,
   renderSquadChips, toggleSquadsPanel, resolveSquadMatch, shuffleTeams,
-  loadActivityLog, renderActivityLog
+  loadActivityLog, renderActivityLog, openActivityLogModal
 });
 </script>
 
+
+<!-- ======================== ACTIVITY LOG MODAL (admin) ======================== -->
+<div class="modal-overlay" id="activityLogModal">
+  <div class="modal" style="position:relative;width:min(640px, 100%)">
+    <button class="modal-close" onclick="closeModal('activityLogModal')">✕</button>
+    <h2>Activity Log</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+      <div style="font-size:13px;color:var(--muted)">Most recent 200 sign-ups, cancellations, waitlist moves, and admin actions across all events.</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <select id="activityLogEventFilter" onchange="renderActivityLog()" style="background:rgba(255,255,255,.05);border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:'Barlow',sans-serif;font-size:14px">
+          <option value="">All Events</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="loadActivityLog()">🔄 Refresh</button>
+      </div>
+    </div>
+    <div id="adminActivityList"></div>
+  </div>
+</div>
 
 <!-- ======================== EDIT EVENT MODAL (admin) ======================== -->
 <div class="modal-overlay" id="editEventModal">
