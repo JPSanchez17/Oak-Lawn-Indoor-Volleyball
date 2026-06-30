@@ -698,6 +698,7 @@
     }
     .nav-btn { padding: 8px 12px; font-size: 13px; flex-shrink: 0; }
     .nav-user { flex-shrink: 0; margin-left: auto; }
+    .nav-profile-label { display: none; }
     .payment-options { grid-template-columns: 1fr; }
   }
 </style>
@@ -1646,6 +1647,7 @@ function afterLogin() {
   const name = currentUser.isAdmin ? 'Admin' : currentUser.firstName;
   const navAvatarHtml = avatarHtml(currentUser.avatarUrl, 36, null, `onclick="showPage('profile')" title="My Profile" class="nav-avatar"`);
   document.getElementById('navUser').innerHTML = `
+    <span class="nav-profile-label" style="color:var(--gold);font-size:13px;font-weight:700;cursor:pointer" onclick="showPage('profile')" title="My Profile">Profile</span>
     ${navAvatarHtml}
     <span style="color:var(--muted);font-size:14px">👋 ${he(name)}</span>
     ${currentUser.isAdmin ? '<span class="badge">ADMIN</span>' : ''}
