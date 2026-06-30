@@ -2183,13 +2183,28 @@ async function cancelSelfFromGroup(eventId) {
 }
 
 async function promoteFromWaitlist(eventId, spotsCount = 1) {
-  const allRegs = regsCache[eventId] || [];
-  const waitlist = allRegs
-    .filter(r => r.waitlisted)
-    .sort((a, b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
-  const toPromote = waitlist.slice(0, spotsCount);
-  for (const w of toPromote) {
-    await setDoc(doc(db, 'registrations', w.id), { waitlisted: false }, { merge: true });
+  // Re-fetch the live waitlist from Firestore instead of trusting the local
+  // regsCache, which is updated asynchronously via onSnapshot and can be
+  // stale by the time this runs (e.g. right after someone else's doc was
+  // just deleted).
+  const snap = await getDocs(query(collection(db, 'registrations'), where('eventId', '==', eventId), where('waitlisted', '==', true)));
+  const waitlist = snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => ((a.signedUpAt?.seconds) || 0) - ((b.signedUpAt?.seconds) || 0));
+
+  let promoted = 0;
+  for (const w of waitlist) {
+    if (promoted >= spotsCount) break;
+    try {
+      // updateDoc throws if the document no longer exists, instead of
+      // silently recreating a near-empty doc the way setDoc(...,{merge:true})
+      // would. That recreation is what was reviving canceled waitlist
+      // entries onto the main list.
+      await updateDoc(doc(db, 'registrations', w.id), { waitlisted: false });
+      promoted++;
+    } catch (e) {
+      console.warn('Skipping stale waitlist entry (likely already canceled):', w.id, e);
+    }
   }
 }
 
