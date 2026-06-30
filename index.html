@@ -2568,10 +2568,16 @@ function shuffleTeams(eventId) {
   const blocks = groups.map(g => g.slice()); // each block stays together
   const solos = mainRegs.filter(r => !groupedIds.has(r.id)).map(r => [r]);
 
-  // Shuffle solo players and squad blocks for fairness, then greedily
-  // pack into the smallest team so squads (and each registrant's guests)
-  // stay together while team sizes balance.
-  const shuffledBlocks = [...blocks, ...solos].sort(() => Math.random() - 0.5);
+  // Shuffle for fairness among equal-sized groups, then pack biggest
+  // groups first (first-fit-decreasing) so large guest parties / squads
+  // don't throw off the balance — squads stay together either way.
+  const shuffledBlocks = [...blocks, ...solos]
+    .sort(() => Math.random() - 0.5)
+    .sort((a, b) => {
+      const wa = a.reduce((s, r) => s + regWeight(r), 0);
+      const wb = b.reduce((s, r) => s + regWeight(r), 0);
+      return wb - wa;
+    });
   const totalWeight = mainRegs.reduce((s, r) => s + regWeight(r), 0);
   const numTeams = Math.max(1, Math.ceil(totalWeight / teamSize));
   const teams = Array.from({ length: numTeams }, () => ({ regs: [], weight: 0 }));
@@ -3461,6 +3467,8 @@ function openAddPlayerModal() {
   document.getElementById('apPayment').value = '';
   document.getElementById('apSkill').value = '';
   document.getElementById('apPaymentExisting').value = '';
+  document.getElementById('apSquadExisting').value = '';
+  document.getElementById('apSquadNew').value = '';
   // reset member search
   clearSelectedMember();
   document.getElementById('apMemberSearch').value = '';
@@ -3549,6 +3557,8 @@ async function submitAddPlayer() {
       const m = selectedMemberProfile;
       const fullName = `${m.firstName || ''} ${m.lastName || ''}`.trim();
       const paymentMethod = document.getElementById('apPaymentExisting').value;
+      const squadNames = (document.getElementById('apSquadExisting')?.value || '')
+        .split(',').map(s => s.trim()).filter(Boolean);
       // Check not already registered
       if (existing.find(r => r.uid === m.id)) return showToast(`${fullName} is already on this event.`, true);
       const regRef = await addDoc(collection(db, 'registrations'), {
@@ -3556,6 +3566,7 @@ async function submitAddPlayer() {
         uid: m.id,
         name: fullName,
         guests: [],
+        squadNames,
         waitlisted,
         manual: true,
         addedBy: currentUser.uid,
@@ -3576,6 +3587,8 @@ async function submitAddPlayer() {
       const phone = document.getElementById('apPhone').value.trim();
       const paymentMethod = document.getElementById('apPayment').value;
       const skill = document.getElementById('apSkill').value;
+      const squadNames = (document.getElementById('apSquadNew')?.value || '')
+        .split(',').map(s => s.trim()).filter(Boolean);
       if (!first || !last) return showToast('First and last name are required.', true);
       const regRef = await addDoc(collection(db, 'registrations'), {
         eventId,
@@ -3583,6 +3596,7 @@ async function submitAddPlayer() {
         name: `${first} ${last}`,
         skill: skill || null,
         guests: [],
+        squadNames,
         waitlisted,
         manual: true,
         addedBy: currentUser.uid,
@@ -4081,6 +4095,12 @@ Object.assign(window, {
           <option value="venmo">📱 Venmo/Zelle</option>
         </select>
       </div>
+      <div class="form-group">
+        <label>Wants to be teamed with <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+        <input type="text" id="apSquadExisting" placeholder="e.g. Bob Martinez, Carlos Reyes"
+          style="width:100%;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">Comma-separated names already on this event's list. They'll be kept together when you shuffle teams.</div>
+      </div>
       <button class="btn btn-primary btn-full" onclick="submitAddPlayer()" style="margin-top:4px">Add to Player List</button>
     </div>
 
@@ -4110,6 +4130,12 @@ Object.assign(window, {
           <option value="B Level">B Level</option>
           <option value="C Level">C Level</option>
         </select>
+      </div>
+      <div class="form-group">
+        <label>Wants to be teamed with <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+        <input type="text" id="apSquadNew" placeholder="e.g. Bob Martinez, Carlos Reyes"
+          style="width:100%;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">Comma-separated names already on this event's list. They'll be kept together when you shuffle teams.</div>
       </div>
       <button class="btn btn-primary btn-full" onclick="submitAddPlayer()" style="margin-top:4px">Add to Player List</button>
     </div>
