@@ -2546,16 +2546,22 @@ function resolveSquadMatch(eventId, key, decision) {
   renderSquadsPanel(eventId);
 }
 
+function regWeight(r) {
+  // A registrant plus any guests they brought counts as multiple spots,
+  // but they must all land on the same team.
+  return 1 + (r.guests?.length || 0);
+}
+
 function shuffleTeams(eventId) {
   const teamSize = Math.max(2, parseInt(document.getElementById('teamSizeInput')?.value, 10) || 6);
   const allRegs = regsCache[eventId] || [];
   const { groups, regsById } = computeSquads(allRegs);
   const mainRegs = allRegs.filter(r => !r.waitlisted);
 
-  const oversizedGroups = groups.filter(g => g.length > teamSize);
+  const oversizedGroups = groups.filter(g => g.reduce((s, r) => s + regWeight(r), 0) > teamSize);
   if (oversizedGroups.length > 0) {
-    const names = oversizedGroups.map(g => `${g.length} players (${g.map(r => r.name).join(', ')})`).join('; ');
-    if (!confirm(`Some squads are bigger than the team size of ${teamSize}: ${names}. They'll be kept together on one team, which will end up larger than the rest. Continue?`)) return;
+    const names = oversizedGroups.map(g => `${g.reduce((s, r) => s + regWeight(r), 0)} spots (${g.map(r => r.name).join(', ')})`).join('; ');
+    if (!confirm(`Some squads (including guests) are bigger than the team size of ${teamSize}: ${names}. They'll be kept together on one team, which will end up larger than the rest. Continue?`)) return;
   }
 
   const groupedIds = new Set(groups.flat().map(r => r.id));
@@ -2563,21 +2569,25 @@ function shuffleTeams(eventId) {
   const solos = mainRegs.filter(r => !groupedIds.has(r.id)).map(r => [r]);
 
   // Shuffle solo players and squad blocks for fairness, then greedily
-  // pack into the smallest team so squads stay together and team sizes balance.
+  // pack into the smallest team so squads (and each registrant's guests)
+  // stay together while team sizes balance.
   const shuffledBlocks = [...blocks, ...solos].sort(() => Math.random() - 0.5);
-  const numTeams = Math.max(1, Math.ceil(mainRegs.length / teamSize));
-  const teams = Array.from({ length: numTeams }, () => []);
+  const totalWeight = mainRegs.reduce((s, r) => s + regWeight(r), 0);
+  const numTeams = Math.max(1, Math.ceil(totalWeight / teamSize));
+  const teams = Array.from({ length: numTeams }, () => ({ regs: [], weight: 0 }));
 
   for (const block of shuffledBlocks) {
+    const blockWeight = block.reduce((s, r) => s + regWeight(r), 0);
     let target = 0;
     // prefer a team that has room without exceeding teamSize when possible
-    const fitting = teams.map((t, i) => i).filter(i => teams[i].length + block.length <= teamSize);
+    const fitting = teams.map((t, i) => i).filter(i => teams[i].weight + blockWeight <= teamSize);
     if (fitting.length > 0) {
-      target = fitting.reduce((min, i) => (teams[i].length < teams[min].length ? i : min), fitting[0]);
+      target = fitting.reduce((min, i) => (teams[i].weight < teams[min].weight ? i : min), fitting[0]);
     } else {
-      target = teams.reduce((min, t, i) => (teams[i].length < teams[min].length ? i : min), 0);
+      target = teams.reduce((min, t, i) => (teams[i].weight < teams[min].weight ? i : min), 0);
     }
-    teams[target].push(...block.map(r => ({ ...r, squadIndex: groups.indexOf(groups.find(g => g.includes(r))) })));
+    teams[target].regs.push(...block.map(r => ({ ...r, squadIndex: groups.indexOf(groups.find(g => g.includes(r))) })));
+    teams[target].weight += blockWeight;
   }
 
   lastShuffleEventId = eventId;
@@ -2590,9 +2600,11 @@ function renderShuffleResults(teams) {
   if (!el) return;
   let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:14px">`;
   teams.forEach((team, i) => {
+    const regs = team.regs;
     html += `<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">Team ${String.fromCharCode(65 + i)} · ${team.length}</div>
-      ${team.map(r => `<div style="font-size:13px;padding:2px 0">${he(r.name)}${r.squadIndex >= 0 ? ` <span style="font-size:11px;color:var(--sky)">sq ${r.squadIndex + 1}</span>` : ''}</div>`).join('')}
+      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">Team ${String.fromCharCode(65 + i)} · ${team.weight}</div>
+      ${regs.map(r => `<div style="font-size:13px;padding:2px 0">${he(r.name)}${r.squadIndex >= 0 ? ` <span style="font-size:11px;color:var(--sky)">sq ${r.squadIndex + 1}</span>` : ''}</div>
+        ${(r.guests || []).map(g => `<div style="font-size:12px;padding:2px 0 2px 14px;color:var(--muted)">↳ ${he(g.name)} <span style="opacity:.6">(guest)</span></div>`).join('')}`).join('')}
     </div>`;
   });
   html += `</div>`;
