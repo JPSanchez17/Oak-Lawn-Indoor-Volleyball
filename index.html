@@ -1094,6 +1094,10 @@
             <label>Courts Available</label>
             <input type="number" id="adm-courts" placeholder="4" min="1">
           </div>
+          <div class="form-group">
+            <label>Default Team Size <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+            <input type="number" id="adm-teamsize" placeholder="6" min="2">
+          </div>
         </div>
         <div class="form-group">
           <label>Court Information <span style="color:var(--muted);font-weight:400">(optional)</span></label>
@@ -1231,6 +1235,14 @@
         <button class="btn btn-outline btn-sm" onclick="addGuestRow()">+ Add Guest</button>
       </div>
       <div id="guestRows"></div>
+    </div>
+
+    <!-- SQUAD / PLAYING WITH -->
+    <div style="margin-bottom:20px">
+      <div style="font-weight:700;font-size:15px;margin-bottom:6px">Playing with anyone signing up separately?</div>
+      <input type="text" id="squadInput" placeholder="e.g. Bob Martinez, Carlos Reyes" oninput="renderSquadChips()" style="width:100%;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">
+      <div style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4">We'll try to group you on the same team once they sign up too — even if that's later.</div>
+      <div id="squadChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
     </div>
 
     <!-- PAYMENT METHOD -->
@@ -1702,9 +1714,10 @@ async function addEvent() {
   const spots = parseInt(document.getElementById('adm-spots').value);
   const cost = parseFloat(document.getElementById('adm-cost').value) || 0;
   const courts = parseInt(document.getElementById('adm-courts').value) || null;
+  const teamSize = parseInt(document.getElementById('adm-teamsize').value) || null;
   const courtInfo = document.getElementById('adm-court-info').value.trim() || null;
-  await addDoc(collection(db, 'events'), { name, date, time, location, spots, cost, courts, courtInfo, createdAt: serverTimestamp() });
-  ['adm-name','adm-date','adm-time','adm-location','adm-spots','adm-cost','adm-courts'].forEach(id => document.getElementById(id).value = '');
+  await addDoc(collection(db, 'events'), { name, date, time, location, spots, cost, courts, teamSize, courtInfo, createdAt: serverTimestamp() });
+  ['adm-name','adm-date','adm-time','adm-location','adm-spots','adm-cost','adm-courts','adm-teamsize'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('adm-court-info').value = '';
   showToast('Event added!');
 }
@@ -1734,6 +1747,7 @@ function openEditEventModal(eventId) {
   document.getElementById('ee-spots').value = ev.spots ?? '';
   document.getElementById('ee-cost').value = ev.cost ?? '';
   document.getElementById('ee-courts').value = ev.courts ?? '';
+  document.getElementById('ee-teamsize').value = ev.teamSize ?? '';
   document.getElementById('ee-court-info').value = ev.courtInfo || '';
   openModal('editEventModal');
 }
@@ -1750,6 +1764,7 @@ async function submitEditEvent() {
   const spots = parseInt(document.getElementById('ee-spots').value);
   const cost = parseFloat(document.getElementById('ee-cost').value) || 0;
   const courts = parseInt(document.getElementById('ee-courts').value) || null;
+  const teamSize = parseInt(document.getElementById('ee-teamsize').value) || null;
   const courtInfo = document.getElementById('ee-court-info').value.trim() || null;
   if (!name || !date || !time || !location || !spots) return showToast('Fill in all event fields.', true);
 
@@ -1760,7 +1775,7 @@ async function submitEditEvent() {
   }
 
   try {
-    await setDoc(doc(db, 'events', eventId), { name, date, time, location, spots, cost, courts, courtInfo }, { merge: true });
+    await setDoc(doc(db, 'events', eventId), { name, date, time, location, spots, cost, courts, teamSize, courtInfo }, { merge: true });
     closeModal('editEventModal');
     showToast('Event updated! ✅');
   } catch (e) {
@@ -1940,8 +1955,20 @@ function openEventSignup(eventId) {
   document.getElementById('payOptVenmo').classList.remove('selected');
   document.getElementById('checkAge').checked = false;
   document.getElementById('checkWaiver').checked = false;
+  document.getElementById('squadInput').value = '';
+  document.getElementById('squadChips').innerHTML = '';
 
   openModal('eventSignupModal');
+}
+
+function renderSquadChips() {
+  const input = document.getElementById('squadInput');
+  const chipsEl = document.getElementById('squadChips');
+  if (!input || !chipsEl) return;
+  const names = input.value.split(',').map(s => s.trim()).filter(Boolean);
+  chipsEl.innerHTML = names.map(n =>
+    `<span style="background:rgba(91,111,212,.15);color:var(--sky);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600">${he(n)}</span>`
+  ).join('');
 }
 
 function addGuestRow() {
@@ -2019,6 +2046,10 @@ async function confirmSignup() {
     guests.push({ name });
   }
 
+  // Collect squad names (people signing up separately they plan to play with)
+  const squadNames = (document.getElementById('squadInput')?.value || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+
   const mainExisting = existing.filter(r => !r.waitlisted);
   const taken = mainExisting.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
   const isFull = taken >= ev.spots;
@@ -2031,6 +2062,7 @@ async function confirmSignup() {
       uid: currentUser.uid,
       name: `${currentUser.firstName} ${currentUser.lastName}`,
       guests: [],
+      squadNames,
       waitlisted: true,
       signedUpAt: serverTimestamp()
     });
@@ -2051,6 +2083,7 @@ async function confirmSignup() {
     uid: currentUser.uid,
     name: `${currentUser.firstName} ${currentUser.lastName}`,
     guests,
+    squadNames,
     waitlisted: false,
     signedUpAt: serverTimestamp()
   });
@@ -2341,9 +2374,11 @@ async function renderRoster() {
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           ${waitRegs.length > 0 ? `<span class="waitlist-badge">⏳ ${waitRegs.length} on waitlist</span>` : ''}
           ${isAdmin ? `<button class="btn btn-outline btn-sm" style="${sortBtnStyle}" onclick="toggleAdminAlphaSort(${!rosterSortAlpha},true);renderRoster()" title="Sort A-Z by first name for easy check-in - groups stay together">${sortBtnLabel}</button>` : ''}
+          ${isAdmin ? `<button class="btn btn-outline btn-sm" onclick="toggleSquadsPanel('${eventId}')">👥 Squads &amp; Teams</button>` : ''}
           ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openAddPlayerModal()">➕ Add Player</button>` : ''}
         </div>
       </div>
+      <div id="squadsPanel"></div>
       ${isAdmin && rosterSortAlpha ? `<div style="padding:7px 20px;background:rgba(255,193,7,.07);border-bottom:1px solid rgba(255,193,7,.25);font-size:12px;color:var(--gold)">🔤 Sorted A–Z by first name — groups stay together for check-in</div>` : ''}
       <div class="roster-table-wrap"><table class="roster-table">
         <thead><tr>
@@ -2358,6 +2393,210 @@ async function renderRoster() {
         <tbody>${mainRows}</tbody>
       </table></div>
     </div>${waitlistSection}`;
+
+  // Re-render the squads panel if it was open before this refresh
+  if (squadsPanelOpen) renderSquadsPanel(eventId);
+}
+
+// ======================== SQUADS & TEAM SHUFFLE ========================
+let squadsPanelOpen = false;
+let squadGroups = [];          // [{ id, memberRegIds: [], manualOverrides: {} }]
+let squadOverrideMap = {};     // regId -> 'confirmed' | 'rejected' for a fuzzy match
+let lastShuffleEventId = null;
+let lastShuffleTeams = null;
+
+function toggleSquadsPanel(eventId) {
+  squadsPanelOpen = !squadsPanelOpen;
+  if (squadsPanelOpen) {
+    renderSquadsPanel(eventId);
+  } else {
+    const panel = document.getElementById('squadsPanel');
+    if (panel) panel.innerHTML = '';
+  }
+}
+
+// Simple fuzzy match: normalize, compare full string and first-name-only,
+// and allow a typed name to match if it's a prefix of the roster name's
+// first+last (handles "Carlos R." vs "Carlos Reyes").
+function namesLikelyMatch(typed, rosterName) {
+  const norm = s => (s || '').toLowerCase().replace(/[^a-z\s]/g, '').trim().replace(/\s+/g, ' ');
+  const t = norm(typed);
+  const r = norm(rosterName);
+  if (!t || !r) return false;
+  if (t === r) return { exact: true };
+  const tParts = t.split(' ');
+  const rParts = r.split(' ');
+  // First name matches and typed last-name initial matches roster last name initial
+  if (tParts[0] === rParts[0]) {
+    if (tParts.length === 1) return { exact: false }; // first-name-only match, needs confirmation
+    const tLast = tParts[tParts.length - 1];
+    const rLast = rParts[rParts.length - 1];
+    if (rLast.startsWith(tLast) || tLast.startsWith(rLast)) return { exact: tLast === rLast };
+  }
+  return false;
+}
+
+// Build squad groups from registrations' squadNames by matching against
+// other registrants' actual names. Returns groups of regIds + match confidence.
+function computeSquads(allRegs) {
+  const regs = allRegs.filter(r => !r.waitlisted);
+  const parent = {}; // union-find
+  const find = id => { while (parent[id] && parent[id] !== id) id = parent[id]; return id; };
+  const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[rb] = ra; };
+  regs.forEach(r => { parent[r.id] = r.id; });
+
+  const uncertainPairs = []; // { fromId, toId, typedName, rosterName, key }
+  const seenUncertainPairKeys = new Set(); // dedupe mutual tags (A tags B AND B tags A)
+
+  for (const r of regs) {
+    for (const typed of (r.squadNames || [])) {
+      for (const other of regs) {
+        if (other.id === r.id) continue;
+        const match = namesLikelyMatch(typed, other.name);
+        if (match) {
+          // Unordered key — a mutual tag (A tags B, B tags A) is the same relationship,
+          // so resolving it in one direction must resolve it in the other too.
+          const key = [r.id, other.id].sort().join('__');
+          const overrideKey = squadOverrideMap[key];
+          if (overrideKey === 'rejected') continue;
+          if (match.exact || overrideKey === 'confirmed') {
+            union(r.id, other.id);
+          } else {
+            if (seenUncertainPairKeys.has(key)) continue;
+            seenUncertainPairKeys.add(key);
+            uncertainPairs.push({ fromId: r.id, toId: other.id, typedName: typed, rosterName: other.name, key });
+          }
+        }
+      }
+    }
+  }
+
+  const groupMap = {};
+  regs.forEach(r => {
+    const root = find(r.id);
+    if (!groupMap[root]) groupMap[root] = [];
+    groupMap[root].push(r);
+  });
+
+  const groups = Object.values(groupMap).filter(g => g.length > 1);
+  return { groups, uncertainPairs, regsById: Object.fromEntries(regs.map(r => [r.id, r])) };
+}
+
+function renderSquadsPanel(eventId) {
+  const panel = document.getElementById('squadsPanel');
+  if (!panel) return;
+  const allRegs = regsCache[eventId] || [];
+  const { groups, uncertainPairs } = computeSquads(allRegs);
+  const mainRegs = allRegs.filter(r => !r.waitlisted);
+  const inSquadIds = new Set(groups.flat().map(r => r.id));
+  const unattachedCount = mainRegs.length - inSquadIds.size;
+
+  let html = `<div style="padding:16px 20px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)">`;
+
+  if (groups.length === 0 && uncertainPairs.length === 0) {
+    html += `<div style="color:var(--muted);font-size:14px">Nobody has tagged squad-mates for this event yet.</div>`;
+  } else {
+    html += `<div style="font-weight:700;font-size:14px;margin-bottom:10px">Squads detected (${groups.length})</div>`;
+    groups.forEach((g, i) => {
+      html += `<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(91,111,212,.1)">
+          <span style="font-size:13px;font-weight:700;color:var(--sky)">Squad ${i + 1}</span>
+          <span style="font-size:12px;color:var(--muted);margin-left:auto">${g.length} players</span>
+        </div>
+        <div style="padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px">
+          ${g.map(r => `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:4px 10px;font-size:12px">${he(r.name)}</span>`).join('')}
+        </div>
+      </div>`;
+    });
+
+    if (uncertainPairs.length > 0) {
+      html += `<div style="font-weight:700;font-size:13px;margin:14px 0 8px;color:var(--gold)">⚠️ Needs confirmation</div>`;
+      uncertainPairs.forEach(p => {
+        html += `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,193,7,.06);border:1px solid rgba(255,193,7,.25);border-radius:8px;margin-bottom:6px;flex-wrap:wrap">
+          <span style="font-size:13px">"${he(p.typedName)}" might be <strong>${he(p.rosterName)}</strong></span>
+          <div style="margin-left:auto;display:flex;gap:6px">
+            <button class="btn btn-outline btn-sm" onclick="resolveSquadMatch('${eventId}','${p.key}','confirmed')">✓ Confirm</button>
+            <button class="btn btn-outline btn-sm" onclick="resolveSquadMatch('${eventId}','${p.key}','rejected')">✕ Not them</button>
+          </div>
+        </div>`;
+      });
+    }
+
+    html += `<div style="font-size:12px;color:var(--muted);margin-top:6px">${inSquadIds.size} of ${mainRegs.length} players are in a squad · ${unattachedCount} unattached</div>`;
+  }
+
+  html += `
+    <div style="display:flex;align-items:center;gap:10px;margin-top:16px;flex-wrap:wrap">
+      <label style="font-size:13px;color:var(--muted)">Team size</label>
+      <input type="number" id="teamSizeInput" value="${(eventsCache.find(e => e.id === eventId)?.teamSize) || 6}" min="2" max="30" style="width:60px;padding:6px 8px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+      <button class="btn btn-primary btn-sm" onclick="shuffleTeams('${eventId}')">🔀 Shuffle Teams</button>
+    </div>
+    <div id="shuffleResults"></div>
+  </div>`;
+
+  panel.innerHTML = html;
+
+  if (lastShuffleEventId === eventId && lastShuffleTeams) {
+    renderShuffleResults(lastShuffleTeams);
+  }
+}
+
+function resolveSquadMatch(eventId, key, decision) {
+  squadOverrideMap[key] = decision;
+  renderSquadsPanel(eventId);
+}
+
+function shuffleTeams(eventId) {
+  const teamSize = Math.max(2, parseInt(document.getElementById('teamSizeInput')?.value, 10) || 6);
+  const allRegs = regsCache[eventId] || [];
+  const { groups, regsById } = computeSquads(allRegs);
+  const mainRegs = allRegs.filter(r => !r.waitlisted);
+
+  const oversizedGroups = groups.filter(g => g.length > teamSize);
+  if (oversizedGroups.length > 0) {
+    const names = oversizedGroups.map(g => `${g.length} players (${g.map(r => r.name).join(', ')})`).join('; ');
+    if (!confirm(`Some squads are bigger than the team size of ${teamSize}: ${names}. They'll be kept together on one team, which will end up larger than the rest. Continue?`)) return;
+  }
+
+  const groupedIds = new Set(groups.flat().map(r => r.id));
+  const blocks = groups.map(g => g.slice()); // each block stays together
+  const solos = mainRegs.filter(r => !groupedIds.has(r.id)).map(r => [r]);
+
+  // Shuffle solo players and squad blocks for fairness, then greedily
+  // pack into the smallest team so squads stay together and team sizes balance.
+  const shuffledBlocks = [...blocks, ...solos].sort(() => Math.random() - 0.5);
+  const numTeams = Math.max(1, Math.ceil(mainRegs.length / teamSize));
+  const teams = Array.from({ length: numTeams }, () => []);
+
+  for (const block of shuffledBlocks) {
+    let target = 0;
+    // prefer a team that has room without exceeding teamSize when possible
+    const fitting = teams.map((t, i) => i).filter(i => teams[i].length + block.length <= teamSize);
+    if (fitting.length > 0) {
+      target = fitting.reduce((min, i) => (teams[i].length < teams[min].length ? i : min), fitting[0]);
+    } else {
+      target = teams.reduce((min, t, i) => (teams[i].length < teams[min].length ? i : min), 0);
+    }
+    teams[target].push(...block.map(r => ({ ...r, squadIndex: groups.indexOf(groups.find(g => g.includes(r))) })));
+  }
+
+  lastShuffleEventId = eventId;
+  lastShuffleTeams = teams;
+  renderShuffleResults(teams);
+}
+
+function renderShuffleResults(teams) {
+  const el = document.getElementById('shuffleResults');
+  if (!el) return;
+  let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:14px">`;
+  teams.forEach((team, i) => {
+    html += `<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">Team ${String.fromCharCode(65 + i)} · ${team.length}</div>
+      ${team.map(r => `<div style="font-size:13px;padding:2px 0">${he(r.name)}${r.squadIndex >= 0 ? ` <span style="font-size:11px;color:var(--sky)">sq ${r.squadIndex + 1}</span>` : ''}</div>`).join('')}
+    </div>`;
+  });
+  html += `</div>`;
+  el.innerHTML = html;
 }
 
 async function adminRemove(regId, eventId, isWaitlisted) {
@@ -3731,7 +3970,8 @@ Object.assign(window, {
   openWaiverModal, unlockWaiverCheckbox,
   sendFriendRequest, cancelFriendRequest, declineFriendRequest, acceptFriendRequest,
   removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage, deleteChat,
-  toggleAdminAlphaSort
+  toggleAdminAlphaSort,
+  renderSquadChips, toggleSquadsPanel, resolveSquadMatch, shuffleTeams
 });
 </script>
 
@@ -3776,6 +4016,10 @@ Object.assign(window, {
       <div class="form-group">
         <label>Courts Available</label>
         <input type="number" id="ee-courts" placeholder="4" min="1">
+      </div>
+      <div class="form-group">
+        <label>Default Team Size <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+        <input type="number" id="ee-teamsize" placeholder="6" min="2">
       </div>
     </div>
     <div class="form-group">
