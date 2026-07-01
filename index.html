@@ -1353,6 +1353,7 @@ const ORGANIZER_PHONE = '(708) 953-6658';
 
 let currentUser = null;
 let eventsCache = [];
+let eventsLoaded = false; // true once the first Firestore snapshot for events has arrived
 let regsCache = {};
 let selectedEventId = null;
 let selectedPayment = null;
@@ -1715,6 +1716,7 @@ function startPublicListeners() {
     if (currentUser?.isAdmin) renderAdminEvents();
   }, 30000);
   unsubEvents = onSnapshot(query(collection(db, 'events'), orderBy('date')), (snap) => {
+    eventsLoaded = true;
     eventsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     // orderBy('date') only sorts by day; break ties between same-day
     // events using their start time.
@@ -1722,7 +1724,7 @@ function startPublicListeners() {
     renderSchedule();
     if (currentUser?.isAdmin) renderAdminEvents();
     populateRosterSelect();
-  }, (err) => console.error('events listener error', err));
+  }, (err) => { eventsLoaded = true; renderSchedule(); if (currentUser?.isAdmin) renderAdminEvents(); console.error('events listener error', err); });
 
   unsubRegistrations = onSnapshot(collection(db, 'registrations'), (snap) => {
     regsCache = {};
@@ -1899,7 +1901,9 @@ function renderSchedule() {
   const el = document.getElementById('eventsList');
   if (!el) return;
 
-  if (!events.length) {
+  if (!eventsLoaded) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">⏳</div><p>Loading schedule…</p></div>`;
+  } else if (!events.length) {
     el.innerHTML = `<div class="empty"><div class="empty-icon">📅</div><p>No open gyms scheduled yet. Check back soon!</p></div>`;
   } else {
     el.innerHTML = events.map(ev => {
@@ -3913,7 +3917,9 @@ async function renderAdminStats() {
 function renderAdminEvents() {
   const el = document.getElementById('adminEventsList');
   if (!el) return;
-  if (!eventsCache.length) {
+  if (!eventsLoaded) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">⏳</div><p>Loading events…</p></div>`;
+  } else if (!eventsCache.length) {
     el.innerHTML = `<div class="empty"><div class="empty-icon">📅</div><p>No events yet. Add one above.</p></div>`;
   } else {
     el.innerHTML = sortEventsForAdminView(eventsCache).map(ev => {
