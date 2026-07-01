@@ -1071,13 +1071,20 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Time</label>
-            <input type="text" id="adm-time" placeholder="7:00 PM – 9:00 PM">
+            <label>Start Time <span style="color:var(--muted);font-weight:400">(Central Time)</span></label>
+            <input type="time" id="adm-start-time">
           </div>
+          <div class="form-group">
+            <label>End Time <span style="color:var(--muted);font-weight:400">(Central Time)</span></label>
+            <input type="time" id="adm-end-time">
+          </div>
+        </div>
+        <div class="form-row">
           <div class="form-group">
             <label>Location</label>
             <input type="text" id="adm-location" placeholder="Oak Lawn Rec Center">
           </div>
+          <div class="form-group"></div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -1700,6 +1707,9 @@ function startPublicListeners() {
   if (unsubEvents || unsubRegistrations) return; // already running
   unsubEvents = onSnapshot(query(collection(db, 'events'), orderBy('date')), (snap) => {
     eventsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // orderBy('date') only sorts by day; break ties between same-day
+    // events using their start time.
+    eventsCache.sort((a, b) => (a.date + (a.startTime || '')).localeCompare(b.date + (b.startTime || '')));
     renderSchedule();
     if (currentUser?.isAdmin) renderAdminEvents();
     populateRosterSelect();
@@ -1727,15 +1737,18 @@ startPublicListeners();
 async function addEvent() {
   const name = document.getElementById('adm-name').value.trim();
   const date = document.getElementById('adm-date').value;
-  const time = document.getElementById('adm-time').value.trim();
+  const startTime = document.getElementById('adm-start-time').value;
+  const endTime = document.getElementById('adm-end-time').value;
   const location = document.getElementById('adm-location').value.trim();
   const spots = parseInt(document.getElementById('adm-spots').value);
   const cost = parseFloat(document.getElementById('adm-cost').value) || 0;
   const courts = parseInt(document.getElementById('adm-courts').value) || null;
   const teamSize = parseInt(document.getElementById('adm-teamsize').value) || null;
   const courtInfo = document.getElementById('adm-court-info').value.trim() || null;
-  await addDoc(collection(db, 'events'), { name, date, time, location, spots, cost, courts, teamSize, courtInfo, createdAt: serverTimestamp() });
-  ['adm-name','adm-date','adm-time','adm-location','adm-spots','adm-cost','adm-courts','adm-teamsize'].forEach(id => document.getElementById(id).value = '');
+  if (!name || !date || !startTime || !endTime || !location || !spots) return showToast('Fill in all event fields.', true);
+  if (endTime <= startTime) return showToast('End time must be after start time.', true);
+  await addDoc(collection(db, 'events'), { name, date, startTime, endTime, location, spots, cost, courts, teamSize, courtInfo, createdAt: serverTimestamp() });
+  ['adm-name','adm-date','adm-start-time','adm-end-time','adm-location','adm-spots','adm-cost','adm-courts','adm-teamsize'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('adm-court-info').value = '';
   showToast('Event added!');
 }
@@ -1760,7 +1773,8 @@ function openEditEventModal(eventId) {
   editingEventId = eventId;
   document.getElementById('ee-name').value = ev.name || '';
   document.getElementById('ee-date').value = ev.date || '';
-  document.getElementById('ee-time').value = ev.time || '';
+  document.getElementById('ee-start-time').value = ev.startTime || '';
+  document.getElementById('ee-end-time').value = ev.endTime || '';
   document.getElementById('ee-location').value = ev.location || '';
   document.getElementById('ee-spots').value = ev.spots ?? '';
   document.getElementById('ee-cost').value = ev.cost ?? '';
@@ -1777,14 +1791,16 @@ async function submitEditEvent() {
 
   const name = document.getElementById('ee-name').value.trim();
   const date = document.getElementById('ee-date').value;
-  const time = document.getElementById('ee-time').value.trim();
+  const startTime = document.getElementById('ee-start-time').value;
+  const endTime = document.getElementById('ee-end-time').value;
   const location = document.getElementById('ee-location').value.trim();
   const spots = parseInt(document.getElementById('ee-spots').value);
   const cost = parseFloat(document.getElementById('ee-cost').value) || 0;
   const courts = parseInt(document.getElementById('ee-courts').value) || null;
   const teamSize = parseInt(document.getElementById('ee-teamsize').value) || null;
   const courtInfo = document.getElementById('ee-court-info').value.trim() || null;
-  if (!name || !date || !time || !location || !spots) return showToast('Fill in all event fields.', true);
+  if (!name || !date || !startTime || !endTime || !location || !spots) return showToast('Fill in all event fields.', true);
+  if (endTime <= startTime) return showToast('End time must be after start time.', true);
 
   const evRegs = (regsCache[eventId] || []).filter(r => !r.waitlisted);
   const taken = evRegs.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
@@ -1793,7 +1809,7 @@ async function submitEditEvent() {
   }
 
   try {
-    await setDoc(doc(db, 'events', eventId), { name, date, time, location, spots, cost, courts, teamSize, courtInfo }, { merge: true });
+    await setDoc(doc(db, 'events', eventId), { name, date, startTime, endTime, location, spots, cost, courts, teamSize, courtInfo }, { merge: true });
     closeModal('editEventModal');
     showToast('Event updated! ✅');
   } catch (e) {
@@ -1802,51 +1818,83 @@ async function submitEditEvent() {
   }
 }
 
-// Returns today's date as a YYYY-MM-DD string in the LOCAL timezone.
-// (toISOString() converts to UTC first, which rolls over to the next
-// calendar day several hours before midnight for US timezones -- that
-// was causing events to vanish from the schedule while they were
-// still happening, or even before they started, local time.)
-function getLocalDateStr(d = new Date()) {
-  const yr = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, '0');
-  const da = String(d.getDate()).padStart(2, '0');
-  return `${yr}-${mo}-${da}`;
+// All events run on Central Time (America/Chicago), regardless of the
+// viewer's or admin's own browser timezone. Every date/end-time comparison
+// below is anchored to Chicago's wall clock so an event never disappears
+// early (or late) just because someone's device is set to a different zone.
+const CHICAGO_TZ = 'America/Chicago';
+
+// Converts a Chicago wall-clock date + 24-hour time ("2026-07-04", "19:30")
+// into the real UTC instant it corresponds to, correctly handling the
+// CST/CDT switch. Uses the standard two-pass trick: format a first guess
+// in the target zone to discover its current UTC offset, then apply that
+// offset to get the true instant.
+function chicagoWallTimeToUTC(dateStr, timeStr) {
+  if (!dateStr || !timeStr) return null;
+  const [y, mo, da] = dateStr.split('-').map(Number);
+  const [hh, mm] = timeStr.split(':').map(Number);
+  if ([y, mo, da, hh, mm].some(n => Number.isNaN(n))) return null;
+  const guess = new Date(Date.UTC(y, mo - 1, da, hh, mm, 0));
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: CHICAGO_TZ, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  }).formatToParts(guess).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+  const chicagoReadingAsUTC = Date.UTC(
+    Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+    parts.hour === '24' ? 0 : Number(parts.hour), Number(parts.minute), Number(parts.second)
+  );
+  const offsetMs = chicagoReadingAsUTC - guess.getTime();
+  return new Date(guess.getTime() - offsetMs);
 }
 
-// Parses the END time out of a free-text time range like "7:00 PM – 9:00 PM"
-// and combines it with the event's date to get a real Date object.
-// Returns null if it can't confidently parse a time.
+// Returns today's date as a YYYY-MM-DD string in CHICAGO time, not the
+// viewer's local timezone. (Using the browser's local date was the root
+// cause of events vanishing early or late — an admin browsing from
+// outside Central Time would see "today" roll over at the wrong moment.)
+function getChicagoDateStr(d = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: CHICAGO_TZ, year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(d).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function getEventStartDateTime(ev) {
+  return chicagoWallTimeToUTC(ev?.date, ev?.startTime);
+}
+
 function getEventEndDateTime(ev) {
-  if (!ev?.date || !ev?.time) return null;
-  const matches = ev.time.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/gi);
-  if (!matches || !matches.length) return null;
-  const m = matches[matches.length - 1].match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-  if (!m) return null;
-  let hour = parseInt(m[1], 10);
-  const minute = parseInt(m[2], 10);
-  const ampm = m[3].toUpperCase();
-  if (ampm === 'PM' && hour !== 12) hour += 12;
-  if (ampm === 'AM' && hour === 12) hour = 0;
-  const d = new Date(ev.date + 'T00:00:00');
-  d.setHours(hour, minute, 0, 0);
-  return d;
+  return chicagoWallTimeToUTC(ev?.date, ev?.endTime);
 }
 
-// True once the event's listed end time has passed. If the end time can't
-// be parsed, we conservatively say it hasn't ended (so it stays visible/
-// signup-able for the rest of that calendar day).
+// True once the event's end time has passed in Chicago time. If the end
+// time can't be parsed (e.g. an older event saved before start/end times
+// existed), we conservatively say it hasn't ended.
 function hasEventEnded(ev) {
   const end = getEventEndDateTime(ev);
   if (!end) return false;
   return new Date() > end;
 }
 
+// Formats an event's start–end range for display, always in Central Time,
+// e.g. "7:00 PM – 9:00 PM CT".
+function formatEventTimeRange(ev) {
+  const start = getEventStartDateTime(ev);
+  const end = getEventEndDateTime(ev);
+  const fmt = (d) => new Intl.DateTimeFormat('en-US', {
+    timeZone: CHICAGO_TZ, hour: 'numeric', minute: '2-digit', hour12: true
+  }).format(d);
+  if (start && end) return `${fmt(start)} – ${fmt(end)} CT`;
+  if (start) return `${fmt(start)} CT`;
+  if (end) return `${fmt(end)} CT`;
+  return '';
+}
+
 let _cleanRunning = false;
 function cleanOldEvents() {
   if (!currentUser?.isAdmin) return;
   if (_cleanRunning) return;
-  const today = getLocalDateStr();
+  const today = getChicagoDateStr();
   const old = eventsCache.filter(e => e.date < today);
   if (!old.length) return;
   _cleanRunning = true;
@@ -1871,8 +1919,11 @@ function cleanOldEvents() {
 // ======================== RENDER SCHEDULE ========================
 function renderSchedule() {
   cleanOldEvents();
-  const today = getLocalDateStr();
-  const events = eventsCache.filter(e => e.date >= today);
+  const isAdminUser = !!(currentUser && currentUser.isAdmin);
+  // Regular users stop seeing an event the moment its end time passes
+  // (Chicago time); admins keep seeing it — e.g. to adjust the roster —
+  // until it's cleaned up by cleanOldEvents above.
+  const events = eventsCache.filter(ev => isAdminUser || !hasEventEnded(ev));
   const el = document.getElementById('eventsList');
   if (!el) return;
 
@@ -1898,7 +1949,6 @@ function renderSchedule() {
 
       let actionBtn = '';
       const intermediateGated = !!currentUser && isIntermediateEvent(ev) && !meetsIntermediateLevel(currentUser);
-      const isAdminUser = !!(currentUser && currentUser.isAdmin);
       const ended = hasEventEnded(ev);
 
       if (ended && !isAdminUser) {
@@ -1940,7 +1990,7 @@ function renderSchedule() {
             <h3>${ev.name}${isIntermediateEvent(ev) ? ' <span style="background:rgba(255,193,7,.15);color:var(--gold);border-radius:100px;padding:2px 10px;font-size:11px;font-weight:700;vertical-align:middle">B LEVEL+</span>' : ''}</h3>
             <div class="event-meta">
               <span>📅 ${d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}</span>
-              <span>🕐 ${ev.time}</span>
+              <span>🕐 ${formatEventTimeRange(ev)}</span>
               <span>📍 ${ev.location}</span>
               <span onclick="showPage('roster');populateRosterSelect();document.getElementById('rosterSelect').value='${ev.id}';renderRoster()" style="cursor:pointer;color:var(--gold);text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;" title="View player list">👥 ${taken}/${ev.spots} spots${waitCount > 0 ? ` · ⏳ ${waitCount} waitlisted` : ''}</span>
               ${ev.courts ? `<span>🏐 ${ev.courts} court${ev.courts > 1 ? 's' : ''}</span>` : ''}
@@ -2010,7 +2060,7 @@ function openEventSignup(eventId) {
   document.getElementById('esm-title').textContent = isFullNow ? `${ev.name} — Waitlist` : ev.name;
   const evDate = new Date(ev.date + 'T12:00:00');
   const dateLine = evDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-  document.getElementById('esm-subtitle').textContent = `${dateLine} · ${ev.time}${ev.courts ? ` · ${ev.courts} court${ev.courts > 1 ? 's' : ''}` : ''}`;
+  document.getElementById('esm-subtitle').textContent = `${dateLine} · ${formatEventTimeRange(ev)}${ev.courts ? ` · ${ev.courts} court${ev.courts > 1 ? 's' : ''}` : ''}`;
   const esmCourtInfo = document.getElementById('esm-court-info');
   if (esmCourtInfo) {
     if (ev.courtInfo) {
@@ -3856,7 +3906,7 @@ function renderAdminEvents() {
       <div class="card" style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center">
         <div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700">${ev.name}</div>
-          <div style="color:var(--muted);font-size:14px;margin-top:4px">${d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · ${ev.time} · ${ev.location}</div>
+          <div style="color:var(--muted);font-size:14px;margin-top:4px">${d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · ${formatEventTimeRange(ev)} · ${ev.location}</div>
           <div style="color:var(--gold);font-size:14px;margin-top:4px">👥 ${taken}/${ev.spots} signed up · $${ev.cost} each${ev.courts ? ` · 🏐 ${ev.courts} court${ev.courts > 1 ? 's' : ''}` : ''}${waitInfo}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
@@ -4249,13 +4299,20 @@ Object.assign(window, {
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Time</label>
-        <input type="text" id="ee-time" placeholder="7:00 PM – 9:00 PM">
+        <label>Start Time <span style="color:var(--muted);font-weight:400">(Central Time)</span></label>
+        <input type="time" id="ee-start-time">
       </div>
+      <div class="form-group">
+        <label>End Time <span style="color:var(--muted);font-weight:400">(Central Time)</span></label>
+        <input type="time" id="ee-end-time">
+      </div>
+    </div>
+    <div class="form-row">
       <div class="form-group">
         <label>Location</label>
         <input type="text" id="ee-location" placeholder="Oak Lawn Rec Center">
       </div>
+      <div class="form-group"></div>
     </div>
     <div class="form-row">
       <div class="form-group">
