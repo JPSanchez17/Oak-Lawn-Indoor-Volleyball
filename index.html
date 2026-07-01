@@ -1311,7 +1311,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
-  signInWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup
+  signInWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, addDoc, setDoc, getDoc, updateDoc, deleteDoc,
@@ -1626,6 +1626,7 @@ async function doRegister(first, last, email, pass, modalId) {
     const cred = await createUserWithEmailAndPassword(auth, email, pass);
     await setDoc(doc(db, 'users', cred.user.uid), { firstName: first, lastName: last, skill: '', bio: '', avatarUrl: '' });
     await setDoc(doc(db, 'users', cred.user.uid, 'private', 'contact'), { email, phone: '' });
+    logActivity(null, 'account_created', { name: `${first} ${last}`, uid: cred.user.uid, actor: 'self' });
     closeModal(modalId);
     showToast(`Welcome, ${first}! 🎉`);
   } catch (err) { showToast(friendlyAuthError(err), true); }
@@ -1637,8 +1638,10 @@ async function googleSignIn() {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
+    const isNewUser = !!getAdditionalUserInfo(result)?.isNewUser;
     const [given, ...rest] = (user.displayName || 'Player').split(' ');
     await ensureUserDoc(user.uid, { firstName: given, lastName: rest.join(' '), email: user.email, phone: '', skill: '', bio: '', avatarUrl: user.photoURL || '' });
+    if (isNewUser) logActivity(null, 'account_created', { name: `${given} ${rest.join(' ')}`.trim(), uid: user.uid, actor: 'self' });
     closeModal('loginModal'); closeModal('signupModal');
     showToast(`Welcome, ${given}! 🎉`);
   } catch (err) { showToast(friendlyAuthError(err), true); }
@@ -2320,10 +2323,10 @@ async function promoteFromWaitlist(eventId, spotsCount = 1) {
 // the signup/cancel flow that triggered them.
 async function logActivity(eventId, type, details = {}) {
   try {
-    const ev = eventsCache.find(e => e.id === eventId);
+    const ev = eventId ? eventsCache.find(e => e.id === eventId) : null;
     await addDoc(collection(db, 'activityLog'), {
       eventId: eventId || null,
-      eventName: ev?.name || 'Unknown Event',
+      eventName: eventId ? (ev?.name || 'Unknown Event') : null,
       type,
       name: details.name || 'Unknown',
       uid: details.uid || null,
@@ -3536,6 +3539,7 @@ function openActivityLogModal() {
 
 // ======================== ACTIVITY LOG ========================
 const ACTIVITY_TYPE_META = {
+  account_created:      { icon: '🆕', label: 'Created account' },
   signup:               { icon: '✅', label: 'Signed up' },
   waitlist_join:        { icon: '⏳', label: 'Joined waitlist' },
   waitlist_leave:       { icon: '🚪', label: 'Left waitlist' },
@@ -3606,7 +3610,7 @@ function renderActivityLog() {
           <span style="font-size:20px;flex-shrink:0">${meta.icon}</span>
           <div style="min-width:0">
             <div style="font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${he(a.name)}${guestNote}${actorNote}</div>
-            <div style="font-size:13px;color:var(--muted)">${meta.label} — ${he(a.eventName || 'Unknown Event')}</div>
+            <div style="font-size:13px;color:var(--muted)">${meta.label}${a.eventName ? ` — ${he(a.eventName)}` : ''}</div>
           </div>
         </div>
         <div style="font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0">${when}</div>
