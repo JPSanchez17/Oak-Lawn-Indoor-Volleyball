@@ -1079,12 +1079,9 @@
             <input type="time" id="adm-end-time">
           </div>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Location</label>
-            <input type="text" id="adm-location" placeholder="Oak Lawn Rec Center">
-          </div>
-          <div class="form-group"></div>
+        <div class="form-group">
+          <label>Location</label>
+          <input type="text" id="adm-location" placeholder="Oak Lawn Rec Center">
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -1705,6 +1702,15 @@ function afterLogin() {
 // script loads rather than waiting on auth state.
 function startPublicListeners() {
   if (unsubEvents || unsubRegistrations) return; // already running
+  // Firestore listeners only fire on data changes (a signup, a cancel,
+  // etc.) — nothing pushes an update purely because the clock ticked past
+  // an event's end time. Without this, a schedule page left open would
+  // keep showing an ended event until some unrelated write happened to
+  // trigger a re-render. Re-checking every 30s keeps it accurate.
+  setInterval(() => {
+    renderSchedule();
+    if (currentUser?.isAdmin) renderAdminEvents();
+  }, 30000);
   unsubEvents = onSnapshot(query(collection(db, 'events'), orderBy('date')), (snap) => {
     eventsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     // orderBy('date') only sorts by day; break ties between same-day
@@ -1848,17 +1854,6 @@ function chicagoWallTimeToUTC(dateStr, timeStr) {
   return new Date(guess.getTime() - offsetMs);
 }
 
-// Returns today's date as a YYYY-MM-DD string in CHICAGO time, not the
-// viewer's local timezone. (Using the browser's local date was the root
-// cause of events vanishing early or late — an admin browsing from
-// outside Central Time would see "today" roll over at the wrong moment.)
-function getChicagoDateStr(d = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: CHICAGO_TZ, year: 'numeric', month: '2-digit', day: '2-digit'
-  }).formatToParts(d).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
-  return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
 function getEventStartDateTime(ev) {
   return chicagoWallTimeToUTC(ev?.date, ev?.startTime);
 }
@@ -1890,39 +1885,13 @@ function formatEventTimeRange(ev) {
   return '';
 }
 
-let _cleanRunning = false;
-function cleanOldEvents() {
-  if (!currentUser?.isAdmin) return;
-  if (_cleanRunning) return;
-  const today = getChicagoDateStr();
-  const old = eventsCache.filter(e => e.date < today);
-  if (!old.length) return;
-  _cleanRunning = true;
-  (async () => {
-    try {
-      const batch = writeBatch(db);
-      for (const ev of old) {
-        batch.delete(doc(db, 'events', ev.id));
-        const regsSnap = await getDocs(query(collection(db, 'registrations'), where('eventId', '==', ev.id)));
-        regsSnap.forEach(r => {
-          batch.delete(r.ref);
-          batch.delete(doc(db, 'registrations', r.id, 'private', 'contact'));
-        });
-      }
-      await batch.commit();
-    } finally {
-      _cleanRunning = false;
-    }
-  })();
-}
-
 // ======================== RENDER SCHEDULE ========================
 function renderSchedule() {
-  cleanOldEvents();
   const isAdminUser = !!(currentUser && currentUser.isAdmin);
   // Regular users stop seeing an event the moment its end time passes
-  // (Chicago time); admins keep seeing it — e.g. to adjust the roster —
-  // until it's cleaned up by cleanOldEvents above.
+  // (Chicago time); admins keep seeing it indefinitely — old events are
+  // no longer auto-deleted, so admins can review/manage them and remove
+  // them manually (Delete button) whenever they're ready.
   const events = eventsCache.filter(ev => isAdminUser || !hasEventEnded(ev));
   const el = document.getElementById('eventsList');
   if (!el) return;
@@ -4307,12 +4276,9 @@ Object.assign(window, {
         <input type="time" id="ee-end-time">
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Location</label>
-        <input type="text" id="ee-location" placeholder="Oak Lawn Rec Center">
-      </div>
-      <div class="form-group"></div>
+    <div class="form-group">
+      <label>Location</label>
+      <input type="text" id="ee-location" placeholder="Oak Lawn Rec Center">
     </div>
     <div class="form-row">
       <div class="form-group">
