@@ -1368,14 +1368,15 @@ let unsubRegistrations = null;
 let unsubActivityLog = null;
 
 // ======================== FRIENDS / MESSAGES STATE ========================
-let friendsCache = [];           // [{uid, firstName, lastName, avatarUrl}]
+let friendsCache = [];           // [{uid, since}] - name/avatar are NOT stored here; resolved live via profilesCache
 let adminMembersCache = [];      // [{id, firstName, lastName, ...}] - avoids embedding names in inline attrs
 let activityLogCache = [];       // [{id, type, eventId, eventName, name, actor, guests, timestamp}]
 let friendUidSet = new Set();
 let incomingRequests = [];        // [{id, from, createdAt}]
 let outgoingRequests = [];        // [{id, to, createdAt}]
 let conversationsCache = [];      // [{id, participants, lastMessage, lastMessageAt, lastRead}]
-let profilesCache = {};           // uid -> {firstName,lastName,avatarUrl}
+let profilesCache = {};           // uid -> {firstName,lastName,avatarUrl} - kept fresh via subscribeProfile()
+let profileUnsubs = {};           // uid -> unsubscribe fn for a live users/{uid} listener
 let currentMsgTab = 'chats';
 let currentChatUid = null;
 let unsubMessages = null;
@@ -1672,6 +1673,8 @@ onAuthStateChanged(auth, async (user) => {
     if (unsubIncomingRequests) { unsubIncomingRequests(); unsubIncomingRequests = null; }
     if (unsubOutgoingRequests) { unsubOutgoingRequests(); unsubOutgoingRequests = null; }
     if (unsubConversations) { unsubConversations(); unsubConversations = null; }
+    Object.keys(profileUnsubs).forEach(uid => unsubscribeProfile(uid));
+    profilesCache = {};
     renderSchedule();
     restorePageFromHash();
   }
@@ -3043,7 +3046,14 @@ function startFriendsAndMessagesListeners() {
   unsubFriends = onSnapshot(collection(db, 'users', currentUser.uid, 'friends'), (snap) => {
     friendsCache = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
     friendUidSet = new Set(friendsCache.map(f => f.uid));
-    friendsCache.forEach(f => { profilesCache[f.uid] = { firstName: f.firstName, lastName: f.lastName, avatarUrl: f.avatarUrl }; });
+    // Keep each friend's name/avatar live by subscribing to their actual
+    // profile doc, instead of trusting a one-time copy on the friend edge.
+    friendUidSet.forEach(uid => subscribeProfile(uid));
+    // Stop listening to profiles for people who are no longer friends
+    // (but keep it alive if we still have their chat open).
+    Object.keys(profileUnsubs).forEach(uid => {
+      if (!friendUidSet.has(uid) && uid !== currentChatUid) unsubscribeProfile(uid);
+    });
     if (document.getElementById('page-messages')?.classList.contains('active')) renderMsgSidebar();
     if (document.getElementById('playerProfileModal')?.classList.contains('open')) {
       const uid = document.getElementById('ppFriendActions')?.dataset.uid;
@@ -3078,6 +3088,22 @@ function startFriendsAndMessagesListeners() {
     updateMessagesBadge();
     if (document.getElementById('page-messages')?.classList.contains('active')) renderMsgSidebar();
   }, (err) => console.error('conversations listener error', err));
+}
+
+function subscribeProfile(uid) {
+  if (!uid || profileUnsubs[uid]) return; // already listening
+  profileUnsubs[uid] = onSnapshot(doc(db, 'users', uid), (snap) => {
+    if (snap.exists()) {
+      const p = snap.data();
+      profilesCache[uid] = { firstName: p.firstName || '', lastName: p.lastName || '', avatarUrl: p.avatarUrl || '' };
+    }
+    if (document.getElementById('page-messages')?.classList.contains('active')) renderMsgSidebar();
+    if (currentChatUid === uid) refreshChatHeader(uid);
+  }, (err) => console.error('profile snapshot error', err));
+}
+
+function unsubscribeProfile(uid) {
+  if (profileUnsubs[uid]) { profileUnsubs[uid](); delete profileUnsubs[uid]; }
 }
 
 async function fetchProfileIfMissing(uid) {
@@ -3173,16 +3199,13 @@ async function declineFriendRequest(fromUid) {
 async function acceptFriendRequest(fromUid) {
   if (!currentUser) return;
   try {
-    const fromProfile = await fetchProfileIfMissing(fromUid) || {};
+    // NOTE: we intentionally do NOT copy firstName/lastName/avatarUrl onto the
+    // friend doc here. Storing a snapshot of someone's name/photo means it goes
+    // stale the moment they change it. Name/avatar are always resolved live
+    // from users/{uid} instead (see subscribeProfile()).
     const batch = writeBatch(db);
-    batch.set(doc(db, 'users', currentUser.uid, 'friends', fromUid), {
-      firstName: fromProfile.firstName || '', lastName: fromProfile.lastName || '',
-      avatarUrl: fromProfile.avatarUrl || '', since: serverTimestamp()
-    });
-    batch.set(doc(db, 'users', fromUid, 'friends', currentUser.uid), {
-      firstName: currentUser.firstName || '', lastName: currentUser.lastName || '',
-      avatarUrl: currentUser.avatarUrl || '', since: serverTimestamp()
-    });
+    batch.set(doc(db, 'users', currentUser.uid, 'friends', fromUid), { since: serverTimestamp() });
+    batch.set(doc(db, 'users', fromUid, 'friends', currentUser.uid), { since: serverTimestamp() });
     batch.delete(doc(db, 'friendRequests', `${fromUid}_${currentUser.uid}`));
     await batch.commit();
     showToast('You are now friends! 🎉');
@@ -3210,8 +3233,8 @@ function switchMsgTab(tab) {
   renderMsgSidebar();
 }
 
-function avatarHtmlFor(profile, size = 38) {
-  return avatarHtml(profile?.avatarUrl || '', size, null, 'class="msg-avatar"');
+function avatarHtmlFor(profile, size = 38, idAttr = null) {
+  return avatarHtml(profile?.avatarUrl || '', size, idAttr, 'class="msg-avatar"');
 }
 
 function renderMsgSidebar() {
@@ -3244,9 +3267,10 @@ function renderMsgSidebar() {
       return;
     }
     el.innerHTML = friendsCache.map(f => {
-      const name = `${f.firstName || ''} ${f.lastName || ''}`.trim() || 'Player';
+      const p = profilesCache[f.uid] || {};
+      const name = `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Player';
       return `<div class="msg-row" onclick="openChatWithFriend('${f.uid}')">
-        ${avatarHtmlFor(f)}
+        ${avatarHtmlFor(p)}
         <div class="msg-row-name">${he(name)}</div>
         <div class="msg-row-actions">
           <button class="btn btn-outline btn-sm" style="padding:5px 10px" onclick="event.stopPropagation();removeFriend('${f.uid}')">Remove</button>
@@ -3309,6 +3333,7 @@ async function openChatWithFriend(uid) {
   currentChatUid = uid;
   currentMsgTab = 'chats';
   switchMsgTab('chats');
+  subscribeProfile(uid); // guarantee live name/avatar updates while this chat is open
 
   const convoId = convoIdFor(currentUser.uid, uid);
   const convoRef = doc(db, 'conversations', convoId);
@@ -3351,14 +3376,27 @@ function renderChatPanel(uid, convoId) {
   const panel = document.getElementById('msgChatPanel');
   panel.innerHTML = `
     <div class="msg-chat-header">
-      ${avatarHtmlFor(p, 32)}
-      <span style="font-weight:700">${he(name)}</span>
+      ${avatarHtmlFor(p, 32, 'msgChatHeaderAvatar')}
+      <span id="msgChatHeaderName" style="font-weight:700">${he(name)}</span>
     </div>
     <div class="msg-chat-body" id="msgChatBody"><div style="color:var(--muted);font-size:13px;text-align:center">Loading messages...</div></div>
     <div class="msg-chat-input">
       <input type="text" id="msgChatInput" placeholder="Type a message..." maxlength="1000" onkeydown="if(event.key==='Enter')sendChatMessage('${convoId}','${uid}')">
       <button class="btn btn-primary btn-sm" onclick="sendChatMessage('${convoId}','${uid}')">Send</button>
     </div>`;
+}
+
+// Updates just the header (avatar + name) of an already-open chat panel in
+// place, without touching the message body/scroll position - called when a
+// live profile update comes in for the person we're currently chatting with.
+function refreshChatHeader(uid) {
+  if (!document.getElementById('msgChatPanel')) return;
+  const p = profilesCache[uid] || {};
+  const name = `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Player';
+  const avatarEl = document.getElementById('msgChatHeaderAvatar');
+  if (avatarEl) avatarEl.outerHTML = avatarHtmlFor(p, 32, 'msgChatHeaderAvatar');
+  const nameEl = document.getElementById('msgChatHeaderName');
+  if (nameEl) nameEl.textContent = name;
 }
 
 function renderChatMessages(messages) {
