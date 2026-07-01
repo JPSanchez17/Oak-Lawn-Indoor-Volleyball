@@ -1885,6 +1885,19 @@ function formatEventTimeRange(ev) {
   return '';
 }
 
+// Puts not-yet-ended events first (soonest first, same order eventsCache
+// is already in), then ended events after (most recently ended first).
+// Only needed for admin views: since old events are no longer auto-deleted,
+// without this every past event would pile up at the top of the list —
+// pushing upcoming events further down as history accumulates — because
+// eventsCache is sorted oldest-first.
+function sortEventsForAdminView(list) {
+  const upcoming = list.filter(ev => !hasEventEnded(ev));
+  const past = list.filter(ev => hasEventEnded(ev))
+    .sort((a, b) => (b.date + (b.endTime || '')).localeCompare(a.date + (a.endTime || '')));
+  return [...upcoming, ...past];
+}
+
 // ======================== RENDER SCHEDULE ========================
 function renderSchedule() {
   const isAdminUser = !!(currentUser && currentUser.isAdmin);
@@ -1892,7 +1905,8 @@ function renderSchedule() {
   // (Chicago time); admins keep seeing it indefinitely — old events are
   // no longer auto-deleted, so admins can review/manage them and remove
   // them manually (Delete button) whenever they're ready.
-  const events = eventsCache.filter(ev => isAdminUser || !hasEventEnded(ev));
+  let events = eventsCache.filter(ev => isAdminUser || !hasEventEnded(ev));
+  if (isAdminUser) events = sortEventsForAdminView(events);
   const el = document.getElementById('eventsList');
   if (!el) return;
 
@@ -3864,7 +3878,7 @@ function renderAdminEvents() {
   if (!eventsCache.length) {
     el.innerHTML = `<div class="empty"><div class="empty-icon">📅</div><p>No events yet. Add one above.</p></div>`;
   } else {
-    el.innerHTML = eventsCache.map(ev => {
+    el.innerHTML = sortEventsForAdminView(eventsCache).map(ev => {
       const d = new Date(ev.date + 'T12:00:00');
       const evRegs = regsCache[ev.id] || [];
       const evMainRegs = evRegs.filter(r => !r.waitlisted);
