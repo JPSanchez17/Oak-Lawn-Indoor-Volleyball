@@ -1824,61 +1824,47 @@ async function submitEditEvent() {
   }
 }
 
-// All events run on Central Time (America/Chicago), regardless of the
-// viewer's or admin's own browser timezone. Every date/end-time comparison
-// below is anchored to Chicago's wall clock so an event never disappears
-// early (or late) just because someone's device is set to a different zone.
-const CHICAGO_TZ = 'America/Chicago';
-
-// Converts a Chicago wall-clock date + 24-hour time ("2026-07-04", "19:30")
-// into the real UTC instant it corresponds to, correctly handling the
-// CST/CDT switch. Uses the standard two-pass trick: format a first guess
-// in the target zone to discover its current UTC offset, then apply that
-// offset to get the true instant.
-function chicagoWallTimeToUTC(dateStr, timeStr) {
-  if (!dateStr || !timeStr) return null;
-  const [y, mo, da] = dateStr.split('-').map(Number);
-  const [hh, mm] = timeStr.split(':').map(Number);
-  if ([y, mo, da, hh, mm].some(n => Number.isNaN(n))) return null;
-  const guess = new Date(Date.UTC(y, mo - 1, da, hh, mm, 0));
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: CHICAGO_TZ, hour12: false,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
-  }).formatToParts(guess).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
-  const chicagoReadingAsUTC = Date.UTC(
-    Number(parts.year), Number(parts.month) - 1, Number(parts.day),
-    parts.hour === '24' ? 0 : Number(parts.hour), Number(parts.minute), Number(parts.second)
-  );
-  const offsetMs = chicagoReadingAsUTC - guess.getTime();
-  return new Date(guess.getTime() - offsetMs);
-}
-
+// Event start/end times are entered assuming Central Time, but we don't
+// convert them — they're just parsed as plain wall-clock values and
+// labeled "CT" wherever they're shown, so this works the same everywhere
+// without timezone math.
 function getEventStartDateTime(ev) {
-  return chicagoWallTimeToUTC(ev?.date, ev?.startTime);
+  if (!ev?.date || !ev?.startTime) return null;
+  const d = new Date(`${ev.date}T${ev.startTime}:00`);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function getEventEndDateTime(ev) {
-  return chicagoWallTimeToUTC(ev?.date, ev?.endTime);
+  if (!ev?.date || !ev?.endTime) return null;
+  const d = new Date(`${ev.date}T${ev.endTime}:00`);
+  return isNaN(d.getTime()) ? null : d;
 }
 
-// True once the event's end time has passed in Chicago time. If the end
-// time can't be parsed (e.g. an older event saved before start/end times
-// existed), we conservatively say it hasn't ended.
+// Returns today's date as a YYYY-MM-DD string (viewer's local time).
+function getLocalDateStr(d = new Date()) {
+  const yr = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${yr}-${mo}-${da}`;
+}
+
 function hasEventEnded(ev) {
   const end = getEventEndDateTime(ev);
-  if (!end) return false;
-  return new Date() > end;
+  if (end) return new Date() > end;
+  // Can't pin down an exact end time — e.g. a legacy event saved before
+  // start/end times existed, which only has the old free-text time field.
+  // Fall back to its calendar date so it still eventually counts as ended
+  // instead of remaining visible forever (there's no auto-cleanup to catch
+  // it anymore now that deletion is manual-only).
+  if (!ev?.date) return false;
+  return ev.date < getLocalDateStr();
 }
 
-// Formats an event's start–end range for display, always in Central Time,
-// e.g. "7:00 PM – 9:00 PM CT".
+// Formats an event's start–end range for display, e.g. "7:00 PM – 9:00 PM CT".
 function formatEventTimeRange(ev) {
   const start = getEventStartDateTime(ev);
   const end = getEventEndDateTime(ev);
-  const fmt = (d) => new Intl.DateTimeFormat('en-US', {
-    timeZone: CHICAGO_TZ, hour: 'numeric', minute: '2-digit', hour12: true
-  }).format(d);
+  const fmt = (d) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   if (start && end) return `${fmt(start)} – ${fmt(end)} CT`;
   if (start) return `${fmt(start)} CT`;
   if (end) return `${fmt(end)} CT`;
@@ -2372,8 +2358,14 @@ function populateRosterSelect() {
   const sel = document.getElementById('rosterSelect');
   if (!sel) return;
   const cur = sel.value;
+  const isAdminUser = !!(currentUser && currentUser.isAdmin);
+  // Same visibility rule as the main schedule: regular users only see
+  // events that haven't ended yet; admins can still pull up any event's
+  // roster, with upcoming events listed first.
+  let list = eventsCache.filter(ev => isAdminUser || !hasEventEnded(ev));
+  if (isAdminUser) list = sortEventsForAdminView(list);
   sel.innerHTML = '<option value="">Select an event...</option>' +
-    eventsCache.map(ev => {
+    list.map(ev => {
       const d = new Date(ev.date + 'T12:00:00');
       return `<option value="${ev.id}" ${ev.id === cur ? 'selected' : ''}>${ev.name} — ${d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</option>`;
     }).join('');
@@ -3858,18 +3850,23 @@ async function submitAddPlayer() {
 }
 
 async function renderAdminStats() {
+  // These stats used to naturally reflect only "current" events, since old
+  // ones were auto-deleted. Now that deletion is manual, eventsCache holds
+  // full history — scope to not-yet-ended events so the dashboard still
+  // shows "what's on the schedule right now" instead of a lifetime total.
+  const upcoming = eventsCache.filter(ev => !hasEventEnded(ev));
   let totalSignups = 0;
-  eventsCache.forEach(e => { totalSignups += (regsCache[e.id] || []).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0); });
+  upcoming.forEach(e => { totalSignups += (regsCache[e.id] || []).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0); });
   let memberCount = '—';
   try { memberCount = (await getDocs(collection(db, 'users'))).size; } catch {}
 
   const statsEl = document.getElementById('adminStats');
   if (!statsEl) return;
   statsEl.innerHTML = `
-    <div class="stat-card"><div class="stat-num">${eventsCache.length}</div><div class="stat-label">Events</div></div>
+    <div class="stat-card"><div class="stat-num">${upcoming.length}</div><div class="stat-label">Events</div></div>
     <div class="stat-card"><div class="stat-num">${totalSignups}</div><div class="stat-label">Signups</div></div>
     <div class="stat-card"><div class="stat-num">${memberCount}</div><div class="stat-label">Members</div></div>
-    <div class="stat-card"><div class="stat-num">${eventsCache.filter(e => (regsCache[e.id]||[]).reduce((s,r)=>s+1+(r.guests?.length||0),0) >= e.spots).length}</div><div class="stat-label">Full Events</div></div>`;
+    <div class="stat-card"><div class="stat-num">${upcoming.filter(e => (regsCache[e.id]||[]).reduce((s,r)=>s+1+(r.guests?.length||0),0) >= e.spots).length}</div><div class="stat-label">Full Events</div></div>`;
 }
 
 function renderAdminEvents() {
