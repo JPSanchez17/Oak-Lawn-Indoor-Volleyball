@@ -1375,6 +1375,10 @@ let profilesCache = {};           // uid -> {firstName,lastName,avatarUrl}
 let currentMsgTab = 'chats';
 let currentChatUid = null;
 let unsubMessages = null;
+let unsubFriends = null;
+let unsubIncomingRequests = null;
+let unsubOutgoingRequests = null;
+let unsubConversations = null;
 
 // ======================== AVATAR ICONS ========================
 // Selectable mascot icons: animals geared up in volleyball headbands + jerseys.
@@ -1660,6 +1664,10 @@ onAuthStateChanged(auth, async (user) => {
     friendsCache = []; friendUidSet = new Set(); incomingRequests = []; outgoingRequests = [];
     conversationsCache = []; currentChatUid = null;
     if (unsubMessages) { unsubMessages(); unsubMessages = null; }
+    if (unsubFriends) { unsubFriends(); unsubFriends = null; }
+    if (unsubIncomingRequests) { unsubIncomingRequests(); unsubIncomingRequests = null; }
+    if (unsubOutgoingRequests) { unsubOutgoingRequests(); unsubOutgoingRequests = null; }
+    if (unsubConversations) { unsubConversations(); unsubConversations = null; }
     renderSchedule();
     restorePageFromHash();
   }
@@ -1794,11 +1802,51 @@ async function submitEditEvent() {
   }
 }
 
+// Returns today's date as a YYYY-MM-DD string in the LOCAL timezone.
+// (toISOString() converts to UTC first, which rolls over to the next
+// calendar day several hours before midnight for US timezones -- that
+// was causing events to vanish from the schedule while they were
+// still happening, or even before they started, local time.)
+function getLocalDateStr(d = new Date()) {
+  const yr = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${yr}-${mo}-${da}`;
+}
+
+// Parses the END time out of a free-text time range like "7:00 PM – 9:00 PM"
+// and combines it with the event's date to get a real Date object.
+// Returns null if it can't confidently parse a time.
+function getEventEndDateTime(ev) {
+  if (!ev?.date || !ev?.time) return null;
+  const matches = ev.time.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/gi);
+  if (!matches || !matches.length) return null;
+  const m = matches[matches.length - 1].match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!m) return null;
+  let hour = parseInt(m[1], 10);
+  const minute = parseInt(m[2], 10);
+  const ampm = m[3].toUpperCase();
+  if (ampm === 'PM' && hour !== 12) hour += 12;
+  if (ampm === 'AM' && hour === 12) hour = 0;
+  const d = new Date(ev.date + 'T00:00:00');
+  d.setHours(hour, minute, 0, 0);
+  return d;
+}
+
+// True once the event's listed end time has passed. If the end time can't
+// be parsed, we conservatively say it hasn't ended (so it stays visible/
+// signup-able for the rest of that calendar day).
+function hasEventEnded(ev) {
+  const end = getEventEndDateTime(ev);
+  if (!end) return false;
+  return new Date() > end;
+}
+
 let _cleanRunning = false;
 function cleanOldEvents() {
   if (!currentUser?.isAdmin) return;
   if (_cleanRunning) return;
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateStr();
   const old = eventsCache.filter(e => e.date < today);
   if (!old.length) return;
   _cleanRunning = true;
@@ -1823,7 +1871,7 @@ function cleanOldEvents() {
 // ======================== RENDER SCHEDULE ========================
 function renderSchedule() {
   cleanOldEvents();
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateStr();
   const events = eventsCache.filter(e => e.date >= today);
   const el = document.getElementById('eventsList');
   if (!el) return;
@@ -1850,7 +1898,22 @@ function renderSchedule() {
 
       let actionBtn = '';
       const intermediateGated = !!currentUser && isIntermediateEvent(ev) && !meetsIntermediateLevel(currentUser);
-      if (myMainSignup) {
+      const isAdminUser = !!(currentUser && currentUser.isAdmin);
+      const ended = hasEventEnded(ev);
+
+      if (ended && !isAdminUser) {
+        // Once an event's end time has passed, regular members lose the
+        // ability to sign up, join the waitlist, cancel, or manage guests.
+        // Admins keep full access below so they can still adjust rosters.
+        if (myMainSignup) {
+          const guestLabel = myMainSignup.guests?.length ? ` +${myMainSignup.guests.length} guest${myMainSignup.guests.length > 1 ? 's' : ''}` : '';
+          actionBtn = `<span style="color:var(--success);font-weight:700;font-size:14px">✅ Signed Up${guestLabel}</span>`;
+        } else if (myWaitlist) {
+          actionBtn = `<span class="waitlist-badge">⏳ Waitlisted</span>`;
+        } else {
+          actionBtn = `<span style="color:var(--muted);font-weight:600;font-size:13px">Event Ended</span>`;
+        }
+      } else if (myMainSignup) {
         const guestLabel = myMainSignup.guests?.length ? ` +${myMainSignup.guests.length} guest${myMainSignup.guests.length > 1 ? 's' : ''}` : '';
         const hasGuests = myMainSignup.guests?.length > 0;
         actionBtn = `<span style="color:var(--success);font-weight:700;font-size:14px">✅ Signed Up${guestLabel}</span>
@@ -1925,6 +1988,10 @@ function openEventSignup(eventId) {
     return;
   }
   const evCheck = eventsCache.find(e => e.id === eventId);
+  if (evCheck && hasEventEnded(evCheck) && !currentUser.isAdmin) {
+    showToast('This event has already ended.', true);
+    return;
+  }
   if (isIntermediateEvent(evCheck) && !meetsIntermediateLevel(currentUser)) {
     showToast('This session is for B Level and above. Set your skill level on your profile, or reach out to an organizer if you believe this is a mistake.', true);
     return;
@@ -2943,8 +3010,9 @@ function convoIdFor(a, b) { return [a, b].sort().join('_'); }
 
 function startFriendsAndMessagesListeners() {
   if (!currentUser) return;
+  if (unsubFriends || unsubIncomingRequests || unsubOutgoingRequests || unsubConversations) return; // already running
 
-  onSnapshot(collection(db, 'users', currentUser.uid, 'friends'), (snap) => {
+  unsubFriends = onSnapshot(collection(db, 'users', currentUser.uid, 'friends'), (snap) => {
     friendsCache = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
     friendUidSet = new Set(friendsCache.map(f => f.uid));
     friendsCache.forEach(f => { profilesCache[f.uid] = { firstName: f.firstName, lastName: f.lastName, avatarUrl: f.avatarUrl }; });
@@ -2955,7 +3023,7 @@ function startFriendsAndMessagesListeners() {
     }
   }, (err) => console.error('friends listener error', err));
 
-  onSnapshot(query(collection(db, 'friendRequests'), where('to', '==', currentUser.uid)), (snap) => {
+  unsubIncomingRequests = onSnapshot(query(collection(db, 'friendRequests'), where('to', '==', currentUser.uid)), (snap) => {
     incomingRequests = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.status === 'pending');
     incomingRequests.forEach(r => fetchProfileIfMissing(r.from));
     updateRequestsBadge();
@@ -2966,7 +3034,7 @@ function startFriendsAndMessagesListeners() {
     }
   }, (err) => console.error('incoming requests listener error', err));
 
-  onSnapshot(query(collection(db, 'friendRequests'), where('from', '==', currentUser.uid)), (snap) => {
+  unsubOutgoingRequests = onSnapshot(query(collection(db, 'friendRequests'), where('from', '==', currentUser.uid)), (snap) => {
     outgoingRequests = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.status === 'pending');
     if (document.getElementById('page-messages')?.classList.contains('active')) renderMsgSidebar();
     if (document.getElementById('playerProfileModal')?.classList.contains('open')) {
@@ -2975,7 +3043,7 @@ function startFriendsAndMessagesListeners() {
     }
   }, (err) => console.error('outgoing requests listener error', err));
 
-  onSnapshot(query(collection(db, 'conversations'), where('participants', 'array-contains', currentUser.uid)), (snap) => {
+  unsubConversations = onSnapshot(query(collection(db, 'conversations'), where('participants', 'array-contains', currentUser.uid)), (snap) => {
     conversationsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       .filter(c => !c.hiddenFor?.[currentUser.uid])
       .sort((a, b) => ((b.lastMessageAt?.seconds) || 0) - ((a.lastMessageAt?.seconds) || 0));
