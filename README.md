@@ -7,18 +7,23 @@ A web app for the Oak Lawn Indoor Volleyball community to manage open gym signup
 ## What's on the Site
 
 **Schedule**
+
 Browse upcoming open gym sessions, see available spots, and sign up directly through the site. Each event shows the location, court details, and a live spot count. Sessions can be skill-restricted (B Level and above) where applicable. If a session is full, you can join the waitlist and get automatically moved up when a spot opens.
 
 **League Board**
+
 A bulletin board for players and teams to connect. Post that you're looking for a league team, recruit players for your team, find a sub, or browse posts filtered by skill level (A / BB / B / C).
 
 **Member Profiles**
+
 Create an account to set up your profile with a display name, skill level, bio, and profile photo. Your profile is visible to other members on the roster.
 
 **Roster**
+
 View who is signed up for each open gym session and browse player profiles. Click on any player's name to view their profile.
 
 **Friends & Messaging**
+
 Add other players as friends from the roster and send direct messages to coordinate for league play or open gym.
 
 ---
