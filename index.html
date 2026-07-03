@@ -2546,10 +2546,55 @@ async function renderRoster() {
         </tr></thead>
         <tbody>${mainRows}</tbody>
       </table></div>
-    </div>${waitlistSection}`;
+    </div>${waitlistSection}
+    ${isAdmin ? `
+    <div class="card" style="margin-top:16px;padding:16px 20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap">
+        <span style="font-weight:700">🗒️ Admin Notes</span>
+        <span id="adminNotesStatus" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <textarea id="adminNotesTextarea" oninput="onAdminNotesInput('${eventId}', this.value)"
+        placeholder="Notes for this session — check-in reminders, who owes what, court assignments, etc. Only admins see this, and it stays here across sign-ups."
+        style="width:100%;min-height:90px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px;line-height:1.5;resize:vertical">${he(eventId in rosterNotesDraft ? rosterNotesDraft[eventId] : (ev?.adminNotes || ''))}</textarea>
+    </div>` : ''}`;
 
   // Re-render the squads panel if it was open before this refresh
   if (squadsPanelOpen) renderSquadsPanel(eventId);
+}
+
+// ======================== PER-EVENT ADMIN NOTES ========================
+// Notes live on the event doc (events/{eventId}.adminNotes) so they persist
+// across sign-ups for that session. rosterNotesDraft holds in-progress typing
+// so it survives a renderRoster() re-render (triggered by any unrelated
+// registration change) without losing what the admin was typing.
+let rosterNotesDraft = {};
+let rosterNotesSaveTimers = {};
+
+function onAdminNotesInput(eventId, value) {
+  rosterNotesDraft[eventId] = value;
+  const statusEl = document.getElementById('adminNotesStatus');
+  if (statusEl) { statusEl.textContent = 'Unsaved changes…'; statusEl.style.color = 'var(--muted)'; }
+  clearTimeout(rosterNotesSaveTimers[eventId]);
+  rosterNotesSaveTimers[eventId] = setTimeout(() => saveAdminNotes(eventId, value), 800);
+}
+
+async function saveAdminNotes(eventId, value) {
+  const statusEl = document.getElementById('adminNotesStatus');
+  if (statusEl) { statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--muted)'; }
+  try {
+    await setDoc(doc(db, 'events', eventId), { adminNotes: value }, { merge: true });
+    const ev = eventsCache.find(e => e.id === eventId);
+    if (ev) ev.adminNotes = value;
+    // Only clear the draft if nothing newer has been typed while this save
+    // was in flight — otherwise we'd wipe out a more recent, still-unsaved
+    // edit and the textarea would revert on the next re-render.
+    if (rosterNotesDraft[eventId] === value) delete rosterNotesDraft[eventId];
+    const statusEl2 = document.getElementById('adminNotesStatus');
+    if (statusEl2) { statusEl2.textContent = '✓ Saved'; statusEl2.style.color = 'var(--success)'; }
+  } catch (e) {
+    const statusEl2 = document.getElementById('adminNotesStatus');
+    if (statusEl2) { statusEl2.textContent = 'Could not save — try again'; statusEl2.style.color = 'var(--danger)'; }
+  }
 }
 
 // ======================== SQUADS & TEAM SHUFFLE ========================
@@ -2851,7 +2896,18 @@ async function adminTogglePayment(regId, eventId, received) {
 }
 
 async function adminToggleGuestPayment(regId, eventId, guestIndex, received) {
-  // 1. Patch the DOM in-place immediately for a snappy toggle — no table flicker
+  const allRegs = regsCache[eventId] || [];
+  const reg = allRegs.find(r => r.id === regId);
+  const prevGuests = reg ? reg.guests : null;
+
+  // 1. Patch regsCache immediately so an unrelated snapshot re-render (from
+  //    some other registration changing) doesn't flash this row back to its
+  //    old state while our transaction is still in flight.
+  if (reg) {
+    reg.guests = (reg.guests || []).map((g, i) => i === guestIndex ? { ...g, paymentReceived: received } : g);
+  }
+
+  // 2. Patch the DOM in-place — no table flicker
   const labelEl = document.getElementById(`gpl-${regId}-${guestIndex}`);
   const rowEl   = document.getElementById(`gpr-${regId}-${guestIndex}`);
   if (labelEl) {
@@ -2860,16 +2916,16 @@ async function adminToggleGuestPayment(regId, eventId, guestIndex, received) {
   }
   if (rowEl) rowEl.style.background = received ? 'rgba(34,197,94,.04)' : 'rgba(255,255,255,.01)';
 
-  // 2. Persist via a transaction that reads the guests array fresh at write
-  //    time, instead of reconstructing it from the local regsCache. Building
-  //    the full array from regsCache and overwriting the doc with it is racy:
-  //    the live registrations listener can rebuild regsCache (and re-render
-  //    the roster) between two quick clicks, so a second toggle can start
-  //    from a copy that doesn't yet include the first toggle's change and
-  //    silently stomp it when it writes the whole array back. A transaction
-  //    always reads the latest committed guests array, so concurrent toggles
-  //    (even on different guests in the same registration, back to back)
-  //    can't clobber each other.
+  // 3. Persist via a transaction that reads the guests array fresh at write
+  //    time, instead of writing whatever regsCache happens to hold. Simply
+  //    writing the locally-patched array (as above) straight to Firestore is
+  //    racy: the live registrations listener can rebuild regsCache between
+  //    two quick clicks, so a second toggle's write could be based on a copy
+  //    that doesn't yet include the first toggle's change and silently stomp
+  //    it. A transaction always reads the latest *committed* guests array, so
+  //    concurrent toggles (even on different guests in the same registration,
+  //    back to back) can't clobber each other — regardless of what regsCache
+  //    looked like when the click happened.
   const regRef = doc(db, 'registrations', regId);
   try {
     await runTransaction(db, async (tx) => {
@@ -2880,15 +2936,10 @@ async function adminToggleGuestPayment(regId, eventId, guestIndex, received) {
       const newGuests = guests.map((g, i) => i === guestIndex ? { ...g, paymentReceived: received } : g);
       tx.set(regRef, { guests: newGuests }, { merge: true });
     });
-
-    // Keep regsCache in sync in case a re-render hasn't come through yet
-    const reg = (regsCache[eventId] || []).find(r => r.id === regId);
-    if (reg) {
-      reg.guests = (reg.guests || []).map((g, i) => i === guestIndex ? { ...g, paymentReceived: received } : g);
-    }
     showToast(received ? 'Guest payment marked as received.' : 'Guest payment marked as pending.');
   } catch (e) {
-    // Rollback DOM on failure
+    // Rollback cache + DOM on failure
+    if (reg) reg.guests = prevGuests;
     if (labelEl) {
       labelEl.textContent = !received ? '✓ Paid' : 'Pending';
       labelEl.style.color = !received ? 'var(--success)' : 'var(--muted)';
@@ -4291,7 +4342,7 @@ Object.assign(window, {
   addEvent, deleteEvent, openEditEventModal, submitEditEvent, openEventSignup, confirmSignup, cancelSignup,
   openManageGroup, removeGuestFromSignup, cancelSelfFromGroup,
   addGuestRow, removeGuestRow, selectPayment,
-  renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleGuestPayment, showPage, openModal, closeModal,
+  renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleGuestPayment, onAdminNotesInput, showPage, openModal, closeModal,
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile, openManualPlayerProfile, adjustAttendance,
   saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, openIconPicker, selectAvatarIcon, uploadProfilePhoto, switchAvatarTab, handlePhotoFileSelect,
   openAddPlayerModal, submitAddPlayer, switchAddPlayerTab, filterMemberSearch, selectMember, clearSelectedMember,
