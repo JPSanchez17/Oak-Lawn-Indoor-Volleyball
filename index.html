@@ -1641,11 +1641,25 @@ async function requestPasswordReset(emailFieldId = 'loginEmail') {
   try {
     await sendPasswordResetEmail(auth, email);
   } catch (err) {
-    // Don't reveal whether an account exists for that email — just fall
-    // through to the same generic confirmation message either way, unless
-    // the email itself was malformed.
-    if ((err?.code || '').includes('invalid-email')) {
+    const code = err?.code || '';
+    // Don't reveal whether an account exists for that email — silently
+    // treat "no such user" the same as success. But real failures (bad
+    // email format, rate limiting, network issues) should say so, or the
+    // person is left thinking an email is coming when it never will.
+    if (code.includes('invalid-email')) {
       showToast('That email address doesn\'t look right.', true);
+      return;
+    }
+    if (code.includes('too-many-requests')) {
+      showToast('Too many attempts — please wait a bit and try again.', true);
+      return;
+    }
+    if (code.includes('network-request-failed')) {
+      showToast('Network error — please check your connection and try again.', true);
+      return;
+    }
+    if (!code.includes('user-not-found')) {
+      showToast('Something went wrong. Please try again.', true);
       return;
     }
   }
