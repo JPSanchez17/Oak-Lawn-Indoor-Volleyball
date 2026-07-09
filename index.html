@@ -731,7 +731,7 @@
   </div>
   <div class="nav-user" id="navUser">
     <button class="btn btn-outline btn-sm" onclick="openModal('loginModal')">Log In</button>
-    <button class="btn btn-primary btn-sm" onclick="openModal('signupModal')">Sign Up</button>
+    <button class="btn btn-primary btn-sm" onclick="openModal('signupModal')">Create Account</button>
   </div>
 </nav>
 
@@ -1169,7 +1169,7 @@
     <h2>Welcome Back</h2>
     <div class="tabs">
       <button class="tab active" id="loginTab" onclick="switchAuthTab('login')">Log In</button>
-      <button class="tab" id="registerTab" onclick="switchAuthTab('register')">Sign Up</button>
+      <button class="tab" id="registerTab" onclick="switchAuthTab('register')">Create Account</button>
     </div>
     <div id="loginForm">
       <button class="google-btn" onclick="googleSignIn()">
@@ -1205,9 +1205,9 @@
 <div class="modal-overlay" id="signupModal">
   <div class="modal" style="position:relative">
     <button class="modal-close" onclick="closeModal('signupModal')">✕</button>
-    <h2>Sign Up</h2>
+    <h2>Create Account</h2>
     <div class="tabs">
-      <button class="tab active" id="signupTab1" onclick="switchAuthTab2('register2')">Sign Up</button>
+      <button class="tab active" id="signupTab1" onclick="switchAuthTab2('register2')">Create Account</button>
       <button class="tab" id="signupTab2" onclick="switchAuthTab2('login2')">Log In</button>
     </div>
     <div id="register2">
@@ -1717,7 +1717,7 @@ onAuthStateChanged(auth, async (user) => {
     currentUser = null;
     document.getElementById('navUser').innerHTML = `
       <button class="btn btn-outline btn-sm" onclick="openModal('loginModal')">Log In</button>
-      <button class="btn btn-primary btn-sm" onclick="openModal('signupModal')">Sign Up</button>`;
+      <button class="btn btn-primary btn-sm" onclick="openModal('signupModal')">Create Account</button>`;
     document.getElementById('adminNavBtn').style.display = 'none';
     document.getElementById('messagesNavBtn').style.display = 'none';
     friendsCache = []; friendUidSet = new Set(); incomingRequests = []; outgoingRequests = [];
