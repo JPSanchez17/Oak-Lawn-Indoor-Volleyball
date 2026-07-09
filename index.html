@@ -701,6 +701,15 @@
     .nav-profile-label { display: none; }
     .payment-options { grid-template-columns: 1fr; }
   }
+@keyframes skillHighlightPulse {
+  0% { box-shadow: 0 0 0 0 rgba(255,193,7,.55); background: rgba(255,193,7,.12); }
+  70% { box-shadow: 0 0 0 12px rgba(255,193,7,0); background: rgba(255,193,7,.12); }
+  100% { box-shadow: 0 0 0 0 rgba(255,193,7,0); background: transparent; }
+}
+.skill-highlight {
+  animation: skillHighlightPulse 1.4s ease-out 3;
+  border-radius: 10px;
+}
 </style>
 </head>
 <body>
@@ -1020,7 +1029,7 @@
         <input type="tel" id="profilePhone" placeholder="(708) 555-0000">
         <div class="form-hint">Only visible to the admin</div>
       </div>
-      <div class="form-group">
+      <div class="form-group" id="skillLevelFormGroup">
         <label>Skill Level</label>
         <select id="profileSkill">
           <option value="">Select your level...</option>
@@ -1954,7 +1963,7 @@ function renderSchedule() {
         actionBtn = `<span class="waitlist-badge">⏳ Waitlist #${waitPos}</span>
                      <button class="btn btn-outline btn-sm" style="margin-top:4px" onclick="cancelSignup('${ev.id}')">Leave Waitlist</button>`;
       } else if (intermediateGated) {
-        actionBtn = `<span style="color:var(--muted);font-weight:600;font-size:13px">🔒 B Level and above</span>`;
+        actionBtn = `<button class="btn btn-outline btn-sm" onclick="goToSkillLevelSetting()" title="Update your skill level on your profile">🔒 B Level and above</button>`;
       } else if (full) {
         actionBtn = `<button class="btn btn-waitlist btn-sm" onclick="openEventSignup('${ev.id}')">Join Waitlist${waitCount > 0 ? ` (${waitCount} waiting)` : ''}</button>`;
       } else {
@@ -2005,6 +2014,23 @@ function isIntermediateEvent(ev) {
 
 function meetsIntermediateLevel(user) {
   return !!user?.skill && INTERMEDIATE_ALLOWED_LEVELS.includes(user.skill);
+}
+
+// Jumps the player straight to their profile's Skill Level field so they can
+// see/update it — used by the 🔒 lock shown on intermediate events they don't
+// yet qualify for.
+function goToSkillLevelSetting() {
+  showPage('profile');
+  setTimeout(() => {
+    const el = document.getElementById('skillLevelFormGroup');
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('skill-highlight');
+    // Force reflow so the animation restarts if it was just removed.
+    void el.offsetWidth;
+    el.classList.add('skill-highlight');
+    setTimeout(() => el.classList.remove('skill-highlight'), 4200);
+  }, 50);
 }
 
 function openEventSignup(eventId) {
@@ -4391,7 +4417,7 @@ Object.assign(window, {
   removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage, deleteChat,
   toggleAdminAlphaSort,
   renderSquadChips, toggleSquadsPanel, resolveSquadMatch, shuffleTeams,
-  loadActivityLog, renderActivityLog, openActivityLogModal
+  loadActivityLog, renderActivityLog, openActivityLogModal, goToSkillLevelSetting
 });
 </script>
 
