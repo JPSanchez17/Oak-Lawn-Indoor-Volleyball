@@ -2680,7 +2680,8 @@ async function saveAdminNotes(eventId, value) {
 
 // ======================== SQUADS & TEAM SHUFFLE ========================
 let squadsPanelOpen = false;
-let squadGroups = [];          // [{ id, memberRegIds: [], manualOverrides: {} }]
+let manualGroups = {};         // eventId -> array of regId arrays, admin-forced groupings
+let manualGroupBuilderOpen = false; // whether the "create manual group" checklist is showing
 let squadOverrideMap = {};     // regId -> 'confirmed' | 'rejected' for a fuzzy match
 let lastShuffleEventId = null;
 let lastShuffleTeams = null;
@@ -2718,7 +2719,7 @@ function namesLikelyMatch(typed, rosterName) {
 
 // Build squad groups from registrations' squadNames by matching against
 // other registrants' actual names. Returns groups of regIds + match confidence.
-function computeSquads(allRegs) {
+function computeSquads(allRegs, eventId) {
   const regs = allRegs.filter(r => !r.waitlisted);
   const parent = {}; // union-find
   const find = id => { while (parent[id] && parent[id] !== id) id = parent[id]; return id; };
@@ -2751,6 +2752,18 @@ function computeSquads(allRegs) {
     }
   }
 
+  // Admin-created manual groups always win — force these regIds onto the
+  // same team regardless of what anyone typed at signup. Skip ids that
+  // aren't part of this event's current (non-waitlisted) roster anymore,
+  // e.g. someone the admin grouped and then cancelled.
+  const regIdSet = new Set(regs.map(r => r.id));
+  const manualRegIdSet = new Set();
+  for (const group of (manualGroups[eventId] || [])) {
+    const present = group.filter(id => regIdSet.has(id));
+    present.forEach(id => manualRegIdSet.add(id));
+    for (let i = 1; i < present.length; i++) union(present[0], present[i]);
+  }
+
   const groupMap = {};
   regs.forEach(r => {
     const root = find(r.id);
@@ -2759,14 +2772,14 @@ function computeSquads(allRegs) {
   });
 
   const groups = Object.values(groupMap).filter(g => g.length > 1);
-  return { groups, uncertainPairs, regsById: Object.fromEntries(regs.map(r => [r.id, r])) };
+  return { groups, uncertainPairs, regsById: Object.fromEntries(regs.map(r => [r.id, r])), manualRegIdSet };
 }
 
 function renderSquadsPanel(eventId) {
   const panel = document.getElementById('squadsPanel');
   if (!panel) return;
   const allRegs = regsCache[eventId] || [];
-  const { groups, uncertainPairs } = computeSquads(allRegs);
+  const { groups, uncertainPairs, regsById, manualRegIdSet } = computeSquads(allRegs, eventId);
   const mainRegs = allRegs.filter(r => !r.waitlisted);
   const headcount = r => 1 + (r.guests?.length || 0);
   const totalPlayers = mainRegs.reduce((s, r) => s + headcount(r), 0);
@@ -2780,13 +2793,15 @@ function renderSquadsPanel(eventId) {
   } else {
     html += `<div style="font-weight:700;font-size:14px;margin-bottom:10px">Squads detected (${groups.length})</div>`;
     groups.forEach((g, i) => {
+      const isManualGroup = g.some(r => manualRegIdSet.has(r.id));
       html += `<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">
         <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(91,111,212,.1)">
           <span style="font-size:13px;font-weight:700;color:var(--sky)">Squad ${i + 1}</span>
+          ${isManualGroup ? '<span style="font-size:11px;color:var(--success)" title="Includes an admin-forced grouping">🛠 manual</span>' : ''}
           <span style="font-size:12px;color:var(--muted);margin-left:auto">${g.reduce((s, r) => s + headcount(r), 0)} players</span>
         </div>
         <div style="padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px">
-          ${g.map(r => `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:4px 10px;font-size:12px">${he(r.name)}</span>
+          ${g.map(r => `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:4px 10px;font-size:12px">${he(r.name)}${manualRegIdSet.has(r.id) ? ' 🛠' : ''}</span>
             ${(r.guests || []).map(guest => `<span style="background:rgba(255,255,255,.03);border:1px dashed var(--border);border-radius:999px;padding:4px 10px;font-size:12px;color:var(--muted)">${he(guest.name)} <span style="opacity:.6">(guest)</span></span>`).join('')}`).join('')}
         </div>
       </div>`;
@@ -2808,6 +2823,41 @@ function renderSquadsPanel(eventId) {
     html += `<div style="font-size:12px;color:var(--muted);margin-top:6px">${inSquadPlayers} of ${totalPlayers} players are in a squad · ${unattachedCount} unattached</div>`;
   }
 
+  // Manual groups — admin can force any players onto the same team
+  // regardless of what they typed at signup (or if they typed nothing).
+  html += `<div style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="font-weight:700;font-size:13px">🛠 Manual Groups</span>
+      <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="openManualGroupBuilder('${eventId}')">+ Group Players</button>
+    </div>`;
+
+  const myManualGroups = manualGroups[eventId] || [];
+  if (myManualGroups.length === 0 && !manualGroupBuilderOpen) {
+    html += `<div style="color:var(--muted);font-size:13px">No manual groups yet — use this to force specific players onto the same team.</div>`;
+  } else {
+    myManualGroups.forEach((ids, idx) => {
+      const names = ids.map(id => regsById[id]?.name).filter(Boolean);
+      html += `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.25);border-radius:8px;margin-bottom:6px">
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${names.map(n => `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:3px 9px;font-size:12px">${he(n)}</span>`).join('')}</div>
+        <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="removeManualGroup('${eventId}',${idx})">Ungroup</button>
+      </div>`;
+    });
+  }
+
+  if (manualGroupBuilderOpen) {
+    html += `<div style="margin-top:8px;padding:12px;border:1px dashed var(--border);border-radius:8px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Select 2 or more players to group together:</div>
+      <div style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto">
+        ${mainRegs.map(r => `<label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" class="mgb-check" value="${r.id}"> ${he(r.name)}</label>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-primary btn-sm" onclick="createManualGroup('${eventId}')">Create Group</button>
+        <button class="btn btn-outline btn-sm" onclick="cancelManualGroupBuilder('${eventId}')">Cancel</button>
+      </div>
+    </div>`;
+  }
+  html += `</div>`;
+
   html += `
     <div style="display:flex;align-items:center;gap:10px;margin-top:16px;flex-wrap:wrap">
       <label style="font-size:13px;color:var(--muted)">Team size</label>
@@ -2824,6 +2874,32 @@ function renderSquadsPanel(eventId) {
   }
 }
 
+function openManualGroupBuilder(eventId) {
+  manualGroupBuilderOpen = true;
+  renderSquadsPanel(eventId);
+}
+
+function cancelManualGroupBuilder(eventId) {
+  manualGroupBuilderOpen = false;
+  renderSquadsPanel(eventId);
+}
+
+function createManualGroup(eventId) {
+  const checked = [...document.querySelectorAll('.mgb-check:checked')].map(el => el.value);
+  if (checked.length < 2) { showToast('Select at least 2 players to group.', true); return; }
+  if (!manualGroups[eventId]) manualGroups[eventId] = [];
+  manualGroups[eventId].push(checked);
+  manualGroupBuilderOpen = false;
+  renderSquadsPanel(eventId);
+  showToast("Group created — they'll land on the same team when you shuffle.");
+}
+
+function removeManualGroup(eventId, idx) {
+  if (!manualGroups[eventId]) return;
+  manualGroups[eventId].splice(idx, 1);
+  renderSquadsPanel(eventId);
+}
+
 function resolveSquadMatch(eventId, key, decision) {
   squadOverrideMap[key] = decision;
   renderSquadsPanel(eventId);
@@ -2838,7 +2914,7 @@ function regWeight(r) {
 function shuffleTeams(eventId) {
   const teamSize = Math.max(2, parseInt(document.getElementById('teamSizeInput')?.value, 10) || 6);
   const allRegs = regsCache[eventId] || [];
-  const { groups, regsById } = computeSquads(allRegs);
+  const { groups, regsById } = computeSquads(allRegs, eventId);
   const mainRegs = allRegs.filter(r => !r.waitlisted);
 
   const oversizedGroups = groups.filter(g => g.reduce((s, r) => s + regWeight(r), 0) > teamSize);
@@ -4507,6 +4583,7 @@ Object.assign(window, {
   removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage, deleteChat,
   toggleAdminAlphaSort,
   renderSquadChips, toggleSquadsPanel, resolveSquadMatch, shuffleTeams,
+  openManualGroupBuilder, cancelManualGroupBuilder, createManualGroup, removeManualGroup,
   loadActivityLog, renderActivityLog, openActivityLogModal, goToSkillLevelSetting, requestPasswordReset
 });
 </script>
