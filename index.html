@@ -1710,7 +1710,7 @@ onAuthStateChanged(auth, async (user) => {
       });
     } catch { profile = { firstName: 'Player', lastName: '', email: user.email, phone: '', skill: '', bio: '', avatarUrl: '' }; }
 
-    currentUser = { uid: user.uid, email: user.email, firstName: profile.firstName, lastName: profile.lastName, phone: profile.phone || '', skill: profile.skill || '', bio: profile.bio || '', avatarUrl: profile.avatarUrl || '', isAdmin: user.email === ADMIN_EMAIL };
+    currentUser = { uid: user.uid, email: user.email, firstName: profile.firstName, lastName: profile.lastName, phone: profile.phone || '', skill: profile.skill || '', bio: profile.bio || '', avatarUrl: profile.avatarUrl || '', isAdmin: user.email === ADMIN_EMAIL, shadowbanned: !!profile.shadowbanned };
     afterLogin();
     restorePageFromHash();
   } else {
@@ -2230,6 +2230,11 @@ async function confirmSignup() {
   // If full, add to waitlist (guests not supported on waitlist)
   if (isFull) {
     if (guests.length > 0) { showToast('Waitlist sign-ups are for one person only — no guests.', true); return; }
+    if (currentUser.shadowbanned) {
+      closeModal('eventSignupModal');
+      showToast(`Added to the waitlist! We'll move you up if a spot opens. 🏐`);
+      return;
+    }
     const regRef = await addDoc(collection(db, 'registrations'), {
       eventId: selectedEventId,
       uid: currentUser.uid,
@@ -2251,6 +2256,15 @@ async function confirmSignup() {
   }
 
   if (taken + 1 + guests.length > ev.spots) { showToast('Sorry, not enough spots available.', true); return; }
+
+  // Shadowbanned users see a normal-looking success, but nothing is ever written —
+  // no registration doc, no roster entry, and (since the email is sent by a Cloud
+  // Function triggered off registration creation) no email notification either.
+  if (currentUser.shadowbanned) {
+    closeModal('eventSignupModal');
+    showToast(`You're on the roster! See you there 🏐`);
+    return;
+  }
 
   const regRef = await addDoc(collection(db, 'registrations'), {
     eventId: selectedEventId,
@@ -3097,6 +3111,7 @@ async function openPlayerProfile(uid) {
           const email = c.email || '—';
           const phone = c.phone || '—';
           const uCount = p.attendanceCount || 0;
+          const isShadowbanned = !!p.shadowbanned;
           adminContactEl.innerHTML =
             '<div style="color:var(--fire);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">🔒 Admin Info</div>' +
             '<div style="display:flex;flex-direction:column;gap:5px">' +
@@ -3108,6 +3123,13 @@ async function openPlayerProfile(uid) {
               '<button onclick="adjustAttendance(\'' + uid + '\',-1)" style="background:rgba(255,255,255,.08);border:none;color:var(--text);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:16px;line-height:1">−</button>' +
               '<span id="ppAdminAttCount" style="font-weight:700;color:var(--text);min-width:24px;text-align:center">' + uCount + '</span>' +
               '<button onclick="adjustAttendance(\'' + uid + '\',1)" style="background:rgba(255,255,255,.08);border:none;color:var(--text);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:16px;line-height:1">+</button>' +
+            '</div>' +
+            '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px">' +
+              '<div>' +
+                '<span style="color:var(--muted);font-size:12px">Shadowban</span>' +
+                (isShadowbanned ? '<span id="ppShadowbanBadge" style="margin-left:8px;background:rgba(239,68,68,.15);color:#ef4444;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700">ACTIVE</span>' : '<span id="ppShadowbanBadge" style="margin-left:8px;color:var(--muted);font-size:11px">off</span>') +
+              '</div>' +
+              '<button id="ppShadowbanBtn" onclick="toggleShadowban(\'' + uid + '\')" class="btn btn-sm ' + (isShadowbanned ? 'btn-outline' : 'btn-danger') + '">' + (isShadowbanned ? 'Remove Shadowban' : 'Shadowban') + '</button>' +
             '</div>';
           adminContactEl.style.display = '';
         } catch (ce) {
@@ -3209,6 +3231,33 @@ async function adjustAttendance(uid, delta) {
     showToast(`Sessions updated: ${next}`);
   } catch (e) {
     showToast('Could not update attendance count.', true);
+  }
+}
+
+async function toggleShadowban(uid) {
+  if (!currentUser?.isAdmin) return;
+  try {
+    const userRef = doc(db, 'users', uid);
+    const snap = await getDoc(userRef);
+    const current = snap.exists() ? !!snap.data().shadowbanned : false;
+    const next = !current;
+    await updateDoc(userRef, { shadowbanned: next });
+
+    const badge = document.getElementById('ppShadowbanBadge');
+    if (badge) {
+      badge.textContent = next ? 'ACTIVE' : 'off';
+      badge.style.background = next ? 'rgba(239,68,68,.15)' : 'transparent';
+      badge.style.color = next ? '#ef4444' : 'var(--muted)';
+    }
+    const btn = document.getElementById('ppShadowbanBtn');
+    if (btn) {
+      btn.textContent = next ? 'Remove Shadowban' : 'Shadowban';
+      btn.className = 'btn btn-sm ' + (next ? 'btn-outline' : 'btn-danger');
+    }
+    if (currentUser.uid === uid) currentUser.shadowbanned = next;
+    showToast(next ? 'Player shadowbanned — their sign-ups will silently no-op.' : 'Shadowban removed.');
+  } catch (e) {
+    showToast('Could not update shadowban status.', true);
   }
 }
 
@@ -4448,7 +4497,7 @@ Object.assign(window, {
   openManageGroup, removeGuestFromSignup, cancelSelfFromGroup,
   addGuestRow, removeGuestRow, selectPayment,
   renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleGuestPayment, onAdminNotesInput, showPage, openModal, closeModal,
-  switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile, openManualPlayerProfile, adjustAttendance,
+  switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile, openManualPlayerProfile, adjustAttendance, toggleShadowban,
   saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, openIconPicker, selectAvatarIcon, uploadProfilePhoto, switchAvatarTab, handlePhotoFileSelect,
   openAddPlayerModal, submitAddPlayer, switchAddPlayerTab, filterMemberSearch, selectMember, clearSelectedMember,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
