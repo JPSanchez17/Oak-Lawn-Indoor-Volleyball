@@ -725,7 +725,7 @@
     <button class="nav-btn" data-page="rules" onclick="showPage('rules')">Rules</button>
     <button class="nav-btn" data-page="schedule" onclick="showPage('schedule')">Schedule</button>
     <button class="nav-btn" data-page="roster" id="rosterNavBtn" onclick="showPage('roster')">Player List</button>
-    <button class="nav-btn" data-page="bulletin" onclick="showPage('bulletin')">League Hub</button>
+    <button class="nav-btn" data-page="bulletin" onclick="showPage('bulletin')">League Hub<span id="bulletinNavBadge" class="msg-badge-dot" style="display:none">•</span></button>
     <button class="nav-btn" data-page="messages" id="messagesNavBtn" onclick="showPage('messages')" style="display:none">Messages<span id="msgNavBadge" class="msg-badge-dot" style="display:none"></span></button>
     <button class="nav-btn" data-page="admin" id="adminNavBtn" onclick="showPage('admin')" style="display:none">Admin</button>
   </div>
@@ -1710,7 +1710,7 @@ onAuthStateChanged(auth, async (user) => {
       });
     } catch { profile = { firstName: 'Player', lastName: '', email: user.email, phone: '', skill: '', bio: '', avatarUrl: '' }; }
 
-    currentUser = { uid: user.uid, email: user.email, firstName: profile.firstName, lastName: profile.lastName, phone: profile.phone || '', skill: profile.skill || '', bio: profile.bio || '', avatarUrl: profile.avatarUrl || '', isAdmin: user.email === ADMIN_EMAIL, shadowbanned: !!profile.shadowbanned };
+    currentUser = { uid: user.uid, email: user.email, firstName: profile.firstName, lastName: profile.lastName, phone: profile.phone || '', skill: profile.skill || '', bio: profile.bio || '', avatarUrl: profile.avatarUrl || '', isAdmin: user.email === ADMIN_EMAIL, shadowbanned: !!profile.shadowbanned, bulletinLastSeen: profile.bulletinLastSeen || 0 };
     afterLogin();
     restorePageFromHash();
   } else {
@@ -1730,6 +1730,7 @@ onAuthStateChanged(auth, async (user) => {
     Object.keys(profileUnsubs).forEach(uid => unsubscribeProfile(uid));
     profilesCache = {};
     renderSchedule();
+    updateBulletinNavBadge();
     restorePageFromHash();
   }
 });
@@ -1751,6 +1752,7 @@ function afterLogin() {
   renderSchedule();
   populateRosterSelect();
   startFriendsAndMessagesListeners();
+  updateBulletinNavBadge();
 }
 
 // ======================== EVENTS LIVE (PUBLIC) ========================
@@ -1759,6 +1761,10 @@ function afterLogin() {
 // script loads rather than waiting on auth state.
 function startPublicListeners() {
   if (unsubEvents || unsubRegistrations) return; // already running
+  unsubBulletinLatest = onSnapshot(query(collection(db, 'bulletin'), orderBy('createdAt', 'desc'), limit(1)), (snap) => {
+    bulletinLatestTs = snap.docs[0]?.data()?.createdAt || 0;
+    updateBulletinNavBadge();
+  }, (err) => console.error('bulletin latest listener error', err));
   // Firestore listeners only fire on data changes (a signup, a cancel,
   // etc.) — nothing pushes an update purely because the clock ticked past
   // an event's end time. Without this, a schedule page left open would
@@ -3275,12 +3281,12 @@ async function openPlayerProfile(uid) {
               '<span id="ppAdminAttCount" style="font-weight:700;color:var(--text);min-width:24px;text-align:center">' + uCount + '</span>' +
               '<button onclick="adjustAttendance(\'' + uid + '\',1)" style="background:rgba(255,255,255,.08);border:none;color:var(--text);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:16px;line-height:1">+</button>' +
             '</div>' +
-            '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px">' +
-              '<div>' +
+            '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:10px">' +
+              '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">' +
                 '<span style="color:var(--muted);font-size:12px">Shadowban</span>' +
-                (isShadowbanned ? '<span id="ppShadowbanBadge" style="margin-left:8px;background:rgba(239,68,68,.15);color:#ef4444;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700">ACTIVE</span>' : '<span id="ppShadowbanBadge" style="margin-left:8px;color:var(--muted);font-size:11px">off</span>') +
+                (isShadowbanned ? '<span id="ppShadowbanBadge" style="background:rgba(239,68,68,.15);color:#ef4444;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700">ACTIVE</span>' : '<span id="ppShadowbanBadge" style="color:var(--muted);font-size:11px">off</span>') +
               '</div>' +
-              '<button id="ppShadowbanBtn" onclick="toggleShadowban(\'' + uid + '\')" class="btn btn-sm ' + (isShadowbanned ? 'btn-outline' : 'btn-danger') + '">' + (isShadowbanned ? 'Remove Shadowban' : 'Shadowban') + '</button>' +
+              '<button id="ppShadowbanBtn" onclick="toggleShadowban(\'' + uid + '\')" class="btn btn-sm ' + (isShadowbanned ? 'btn-outline' : 'btn-danger') + '" style="width:100%;box-sizing:border-box">' + (isShadowbanned ? 'Remove Shadowban' : 'Shadowban') + '</button>' +
             '</div>';
           adminContactEl.style.display = '';
         } catch (ce) {
@@ -4339,7 +4345,7 @@ function showPage(name) {
     if (currentUser && !currentUser.phone) showPhoneRequiredBanner();
     else hidePhoneRequiredBanner();
   }
-  if (name === 'bulletin') renderBulletin();
+  if (name === 'bulletin') { renderBulletin(); markBulletinSeen(); }
   if (name === 'messages') {
     // Each fresh visit to the Messages page should start blank — otherwise
     // whatever chat was last open (possibly from a previous visit, or even
@@ -4421,6 +4427,32 @@ let bbFilter = 'all';
 let bulletinPostsCache = [];
 let currentThreadPostId = null;
 let unsubReplies = null;
+let unsubBulletinLatest = null;
+let bulletinLatestTs = 0;
+
+// Nav badge: lights up when a bulletin post newer than the last time the
+// user opened the League Hub tab comes in. Synced per account via a field
+// on the user's own doc, so it follows them across devices. Signed-out
+// visitors have no account to sync to, so they fall back to localStorage.
+function updateBulletinNavBadge() {
+  const badge = document.getElementById('bulletinNavBadge');
+  if (!badge) return;
+  const lastSeen = currentUser ? (currentUser.bulletinLastSeen || 0) : Number(localStorage.getItem('bulletinLastSeen') || 0);
+  badge.style.display = (bulletinLatestTs > lastSeen) ? '' : 'none';
+}
+
+async function markBulletinSeen() {
+  const seenAt = bulletinLatestTs || Date.now();
+  if (currentUser) {
+    currentUser.bulletinLastSeen = seenAt;
+    updateBulletinNavBadge();
+    try { await updateDoc(doc(db, 'users', currentUser.uid), { bulletinLastSeen: seenAt }); }
+    catch (e) { console.error('could not sync bulletinLastSeen', e); }
+  } else {
+    localStorage.setItem('bulletinLastSeen', String(seenAt));
+    updateBulletinNavBadge();
+  }
+}
 
 function openBulletinForm() {
   if (!currentUser) { showToast('Please log in to post.'); openModal('loginModal'); return; }
