@@ -2554,10 +2554,10 @@ async function renderRoster() {
             <span id="${gPaidLabelId}" style="font-size:12px;font-weight:700;color:${gPaid ? 'var(--success)' : 'var(--muted)'}">${gPaid ? '✓ Paid' : 'Pending'}</span>
           </label>
         </td>` : '';
-        rows += `<tr id="${gPaidRowId}" style="background:${gPaid && isAdmin ? 'rgba(34,197,94,.04)' : 'rgba(255,255,255,.01)'}">
+        rows += `<tr id="${gPaidRowId}" style="background:${gPaid && isAdmin ? 'rgba(34,197,94,.06)' : 'rgba(91,111,212,.06)'};border-left:3px solid var(--sky)">
           ${gPaidCell}
           <td style="color:var(--muted)">${num++}</td>
-          <td style="color:var(--muted);padding-left:28px">↳ ${he(g.name)} <span style="font-size:11px;opacity:.6">(guest)</span></td>
+          <td style="padding-left:24px"><span style="color:var(--muted)">↳</span> <span style="color:var(--text);font-weight:600">${he(g.name)}</span> <span style="background:rgba(91,111,212,.18);color:var(--sky);border-radius:100px;padding:2px 9px;font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;vertical-align:middle">Guest</span></td>
           ${isAdmin ? '<td></td>' : ''}
           ${isAdmin ? '<td></td>' : ''}
           ${isAdmin ? '<td></td>' : ''}
