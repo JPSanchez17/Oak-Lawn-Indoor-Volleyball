@@ -252,7 +252,7 @@
     margin-bottom: 4px;
   }
 
-  .event-meta { color: var(--muted); font-size: 14px; display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+  .event-meta { color: var(--text); font-size: 14px; display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
 
   .spots-bar { height: 6px; background: var(--border); border-radius: 100px; overflow: hidden; margin-top: 8px; }
   .spots-fill { height: 100%; background: linear-gradient(90deg, var(--purple), var(--fire), var(--gold)); border-radius: 100px; transition: width .5s; }
@@ -725,7 +725,7 @@
     <button class="nav-btn" data-page="rules" onclick="showPage('rules')">Rules</button>
     <button class="nav-btn" data-page="schedule" onclick="showPage('schedule')">Schedule</button>
     <button class="nav-btn" data-page="roster" id="rosterNavBtn" onclick="showPage('roster')">Player List</button>
-    <button class="nav-btn" data-page="bulletin" onclick="showPage('bulletin')">League Hub</button>
+    <button class="nav-btn" data-page="bulletin" onclick="showPage('bulletin')">League Hub<span id="bulletinNavBadge" class="msg-badge-dot" style="display:none">•</span></button>
     <button class="nav-btn" data-page="messages" id="messagesNavBtn" onclick="showPage('messages')" style="display:none">Messages<span id="msgNavBadge" class="msg-badge-dot" style="display:none"></span></button>
     <button class="nav-btn" data-page="admin" id="adminNavBtn" onclick="showPage('admin')" style="display:none">Admin</button>
   </div>
@@ -1245,8 +1245,8 @@
   <div class="modal" style="position:relative">
     <button class="modal-close" onclick="closeModal('eventSignupModal')">✕</button>
     <h2 id="esm-title">Sign Up</h2>
-    <div id="esm-subtitle" style="color:var(--muted);font-size:14px;margin-bottom:10px;margin-top:-4px"></div>
-    <div id="esm-court-info" style="display:none;font-size:13px;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:7px;padding:8px 11px;line-height:1.5;margin-bottom:14px"></div>
+    <div id="esm-subtitle" style="color:var(--text);font-size:14px;margin-bottom:10px;margin-top:-4px"></div>
+    <div id="esm-court-info" style="display:none;font-size:13px;color:var(--text);background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:7px;padding:8px 11px;line-height:1.5;margin-bottom:14px"></div>
 
     <!-- Price summary -->
     <div class="payment-box" id="esm-pricebox">
@@ -1383,6 +1383,8 @@ let rosterContactEventId = null; // which event the contact cache belongs to
 let unsubEvents = null;
 let unsubRegistrations = null;
 let unsubActivityLog = null;
+let unsubBulletinLatest = null;
+let bulletinLatestTs = 0;
 
 // ======================== FRIENDS / MESSAGES STATE ========================
 let friendsCache = [];           // [{uid, since}] - name/avatar are NOT stored here; resolved live via profilesCache
@@ -1710,7 +1712,7 @@ onAuthStateChanged(auth, async (user) => {
       });
     } catch { profile = { firstName: 'Player', lastName: '', email: user.email, phone: '', skill: '', bio: '', avatarUrl: '' }; }
 
-    currentUser = { uid: user.uid, email: user.email, firstName: profile.firstName, lastName: profile.lastName, phone: profile.phone || '', skill: profile.skill || '', bio: profile.bio || '', avatarUrl: profile.avatarUrl || '', isAdmin: user.email === ADMIN_EMAIL, shadowbanned: !!profile.shadowbanned };
+    currentUser = { uid: user.uid, email: user.email, firstName: profile.firstName, lastName: profile.lastName, phone: profile.phone || '', skill: profile.skill || '', bio: profile.bio || '', avatarUrl: profile.avatarUrl || '', isAdmin: user.email === ADMIN_EMAIL, shadowbanned: !!profile.shadowbanned, bulletinLastSeen: profile.bulletinLastSeen || 0 };
     afterLogin();
     restorePageFromHash();
   } else {
@@ -1730,6 +1732,7 @@ onAuthStateChanged(auth, async (user) => {
     Object.keys(profileUnsubs).forEach(uid => unsubscribeProfile(uid));
     profilesCache = {};
     renderSchedule();
+    updateBulletinNavBadge();
     restorePageFromHash();
   }
 });
@@ -1751,6 +1754,10 @@ function afterLogin() {
   renderSchedule();
   populateRosterSelect();
   startFriendsAndMessagesListeners();
+  updateBulletinNavBadge();
+  if (currentUser.isAdmin) {
+    setDoc(doc(db, 'users', currentUser.uid), { isAdmin: true }, { merge: true }).catch(e => console.error('could not set isAdmin flag', e));
+  }
 }
 
 // ======================== EVENTS LIVE (PUBLIC) ========================
@@ -1759,6 +1766,10 @@ function afterLogin() {
 // script loads rather than waiting on auth state.
 function startPublicListeners() {
   if (unsubEvents || unsubRegistrations) return; // already running
+  unsubBulletinLatest = onSnapshot(query(collection(db, 'bulletin'), orderBy('createdAt', 'desc'), limit(1)), (snap) => {
+    bulletinLatestTs = snap.docs[0]?.data()?.createdAt || 0;
+    updateBulletinNavBadge();
+  }, (err) => console.error('bulletin latest listener error', err));
   // Firestore listeners only fire on data changes (a signup, a cancel,
   // etc.) — nothing pushes an update purely because the clock ticked past
   // an event's end time. Without this, a schedule page left open would
@@ -2024,7 +2035,7 @@ function renderSchedule() {
               <span onclick="showPage('roster');populateRosterSelect();document.getElementById('rosterSelect').value='${ev.id}';renderRoster()" style="cursor:pointer;color:var(--gold);text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;" title="View player list">👥 ${taken}/${ev.spots} spots${waitCount > 0 ? ` · ⏳ ${waitCount} waitlisted` : ''}</span>
               ${ev.courts ? `<span>🏐 ${ev.courts} court${ev.courts > 1 ? 's' : ''}</span>` : ''}
             </div>
-            ${ev.courtInfo ? `<div style="margin-top:6px;font-size:13px;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:7px;padding:8px 11px;line-height:1.5">📋 ${ev.courtInfo.replace(/\n/g, '<br>')}</div>` : ''}
+            ${ev.courtInfo ? `<div style="margin-top:6px;font-size:13px;color:var(--text);background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:7px;padding:8px 11px;line-height:1.5">📋 ${ev.courtInfo.replace(/\n/g, '<br>')}</div>` : ''}
             <div class="spots-bar"><div class="spots-fill" style="width:${Math.min(pct,100)}%"></div></div>
           </div>
         </div>
@@ -3239,7 +3250,7 @@ async function openPlayerProfile(uid) {
     bioEl.textContent = p.bio || 'No bio yet.';
     bioEl.style.display = p.bio ? '' : 'none';
 
-    profilesCache[uid] = { firstName: p.firstName || '', lastName: p.lastName || '', avatarUrl: p.avatarUrl || '' };
+    profilesCache[uid] = { firstName: p.firstName || '', lastName: p.lastName || '', avatarUrl: p.avatarUrl || '', isAdmin: !!p.isAdmin };
     renderFriendActionButtons(uid);
 
     // Attendance count
@@ -3275,12 +3286,12 @@ async function openPlayerProfile(uid) {
               '<span id="ppAdminAttCount" style="font-weight:700;color:var(--text);min-width:24px;text-align:center">' + uCount + '</span>' +
               '<button onclick="adjustAttendance(\'' + uid + '\',1)" style="background:rgba(255,255,255,.08);border:none;color:var(--text);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:16px;line-height:1">+</button>' +
             '</div>' +
-            '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px">' +
-              '<div>' +
+            '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:10px">' +
+              '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">' +
                 '<span style="color:var(--muted);font-size:12px">Shadowban</span>' +
-                (isShadowbanned ? '<span id="ppShadowbanBadge" style="margin-left:8px;background:rgba(239,68,68,.15);color:#ef4444;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700">ACTIVE</span>' : '<span id="ppShadowbanBadge" style="margin-left:8px;color:var(--muted);font-size:11px">off</span>') +
+                (isShadowbanned ? '<span id="ppShadowbanBadge" style="background:rgba(239,68,68,.15);color:#ef4444;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700">ACTIVE</span>' : '<span id="ppShadowbanBadge" style="color:var(--muted);font-size:11px">off</span>') +
               '</div>' +
-              '<button id="ppShadowbanBtn" onclick="toggleShadowban(\'' + uid + '\')" class="btn btn-sm ' + (isShadowbanned ? 'btn-outline' : 'btn-danger') + '">' + (isShadowbanned ? 'Remove Shadowban' : 'Shadowban') + '</button>' +
+              '<button id="ppShadowbanBtn" onclick="toggleShadowban(\'' + uid + '\')" class="btn btn-sm ' + (isShadowbanned ? 'btn-outline' : 'btn-danger') + '" style="width:100%;box-sizing:border-box">' + (isShadowbanned ? 'Remove Shadowban' : 'Shadowban') + '</button>' +
             '</div>';
           adminContactEl.style.display = '';
         } catch (ce) {
@@ -3471,7 +3482,7 @@ function subscribeProfile(uid) {
   profileUnsubs[uid] = onSnapshot(doc(db, 'users', uid), (snap) => {
     if (snap.exists()) {
       const p = snap.data();
-      profilesCache[uid] = { firstName: p.firstName || '', lastName: p.lastName || '', avatarUrl: p.avatarUrl || '' };
+      profilesCache[uid] = { firstName: p.firstName || '', lastName: p.lastName || '', avatarUrl: p.avatarUrl || '', isAdmin: !!p.isAdmin };
     }
     if (document.getElementById('page-messages')?.classList.contains('active')) renderMsgSidebar();
     if (currentChatUid === uid) refreshChatHeader(uid);
@@ -3488,7 +3499,7 @@ async function fetchProfileIfMissing(uid) {
     const snap = await getDoc(doc(db, 'users', uid));
     if (snap.exists()) {
       const p = snap.data();
-      profilesCache[uid] = { firstName: p.firstName || '', lastName: p.lastName || '', avatarUrl: p.avatarUrl || '' };
+      profilesCache[uid] = { firstName: p.firstName || '', lastName: p.lastName || '', avatarUrl: p.avatarUrl || '', isAdmin: !!p.isAdmin };
     }
   } catch (e) { /* ignore */ }
   if (document.getElementById('page-messages')?.classList.contains('active')) renderMsgSidebar();
@@ -3524,25 +3535,33 @@ function renderFriendActionButtons(uid) {
 
   if (!currentUser || uid === currentUser.uid) { el.innerHTML = ''; return; }
 
-  if (friendUidSet.has(uid)) {
+  const isFriend = friendUidSet.has(uid);
+  // Admins can message anyone, and anyone can message the admin, without
+  // adding each other as friends first.
+  const canMessage = isFriend || currentUser.isAdmin || !!profilesCache[uid]?.isAdmin;
+  const messageBtn = `<button class="btn btn-primary btn-sm" onclick="closeModal('playerProfileModal');openChatWithFriend('${uid}')">💬 Message</button>`;
+
+  if (isFriend) {
     el.innerHTML = `
       <span class="badge" style="background:rgba(34,197,94,.15);color:var(--success)">✓ Friends</span>
-      <button class="btn btn-primary btn-sm" onclick="closeModal('playerProfileModal');openChatWithFriend('${uid}')">💬 Message</button>`;
+      ${messageBtn}`;
     return;
   }
+
   const incoming = incomingRequests.find(r => r.from === uid);
   if (incoming) {
     el.innerHTML = `
+      ${canMessage ? messageBtn : ''}
       <button class="btn btn-success btn-sm" onclick="acceptFriendRequest('${uid}')">Accept Request</button>
       <button class="btn btn-outline btn-sm" onclick="declineFriendRequest('${uid}')">Decline</button>`;
     return;
   }
   const outgoing = outgoingRequests.find(r => r.to === uid);
   if (outgoing) {
-    el.innerHTML = `<button class="btn btn-outline btn-sm" onclick="cancelFriendRequest('${uid}')">Request Sent — Cancel</button>`;
+    el.innerHTML = `${canMessage ? messageBtn : ''}<button class="btn btn-outline btn-sm" onclick="cancelFriendRequest('${uid}')">Request Sent — Cancel</button>`;
     return;
   }
-  el.innerHTML = `<button class="btn btn-primary btn-sm" onclick="sendFriendRequest('${uid}')">+ Add Friend</button>`;
+  el.innerHTML = `${canMessage ? messageBtn : ''}<button class="btn btn-primary btn-sm" onclick="sendFriendRequest('${uid}')">+ Add Friend</button>`;
 }
 
 async function sendFriendRequest(toUid) {
@@ -3703,7 +3722,9 @@ async function deleteChat(convoId, otherUid) {
 
 async function openChatWithFriend(uid) {
   if (!currentUser) return;
-  if (!friendUidSet.has(uid)) { showToast('You can only message friends.', true); return; }
+  await fetchProfileIfMissing(uid); // ensure profilesCache[uid].isAdmin is known before the check below
+  const canMessage = friendUidSet.has(uid) || currentUser.isAdmin || !!profilesCache[uid]?.isAdmin;
+  if (!canMessage) { showToast('You can only message friends.', true); return; }
 
   showPage('messages');
   currentChatUid = uid;
@@ -3724,7 +3745,6 @@ async function openChatWithFriend(uid) {
     }
   } catch (e) { /* ignore, will surface on send if rules block it */ }
 
-  await fetchProfileIfMissing(uid);
   renderChatPanel(uid, convoId);
 
   // mark read and un-hide (in case this chat was previously deleted from the list)
@@ -3794,7 +3814,7 @@ async function sendChatMessage(convoId, otherUid) {
   const input = document.getElementById('msgChatInput');
   const text = (input?.value || '').trim();
   if (!text) return;
-  if (!friendUidSet.has(otherUid)) { showToast('You can only message friends.', true); return; }
+  if (!(friendUidSet.has(otherUid) || currentUser.isAdmin || !!profilesCache[otherUid]?.isAdmin)) { showToast('You can only message friends.', true); return; }
   input.value = '';
   try {
     await addDoc(collection(db, 'conversations', convoId, 'messages'), {
@@ -4339,7 +4359,7 @@ function showPage(name) {
     if (currentUser && !currentUser.phone) showPhoneRequiredBanner();
     else hidePhoneRequiredBanner();
   }
-  if (name === 'bulletin') renderBulletin();
+  if (name === 'bulletin') { renderBulletin(); markBulletinSeen(); }
   if (name === 'messages') {
     // Each fresh visit to the Messages page should start blank — otherwise
     // whatever chat was last open (possibly from a previous visit, or even
@@ -4421,6 +4441,30 @@ let bbFilter = 'all';
 let bulletinPostsCache = [];
 let currentThreadPostId = null;
 let unsubReplies = null;
+
+// Nav badge: lights up when a bulletin post newer than the last time the
+// user opened the League Hub tab comes in. Synced per account via a field
+// on the user's own doc, so it follows them across devices. Signed-out
+// visitors have no account to sync to, so they fall back to localStorage.
+function updateBulletinNavBadge() {
+  const badge = document.getElementById('bulletinNavBadge');
+  if (!badge) return;
+  const lastSeen = currentUser ? (currentUser.bulletinLastSeen || 0) : Number(localStorage.getItem('bulletinLastSeen') || 0);
+  badge.style.display = (bulletinLatestTs > lastSeen) ? '' : 'none';
+}
+
+async function markBulletinSeen() {
+  const seenAt = bulletinLatestTs || Date.now();
+  if (currentUser) {
+    currentUser.bulletinLastSeen = seenAt;
+    updateBulletinNavBadge();
+    try { await updateDoc(doc(db, 'users', currentUser.uid), { bulletinLastSeen: seenAt }); }
+    catch (e) { console.error('could not sync bulletinLastSeen', e); }
+  } else {
+    localStorage.setItem('bulletinLastSeen', String(seenAt));
+    updateBulletinNavBadge();
+  }
+}
 
 function openBulletinForm() {
   if (!currentUser) { showToast('Please log in to post.'); openModal('loginModal'); return; }
