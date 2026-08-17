@@ -1062,6 +1062,7 @@
       <button class="tab active" id="admTab1" onclick="switchAdminTab('events')">Events</button>
       <button class="tab" id="admTab2" onclick="switchAdminTab('members')">Members</button>
       <button class="tab" id="admTab3" onclick="switchAdminTab('settings')">Settings</button>
+      <button class="tab" id="admTab4" onclick="switchAdminTab('reports')">Reports</button>
     </div>
 
     <!-- EVENTS TAB -->
@@ -1158,6 +1159,13 @@
 
         <div style="margin-top:14px;font-size:12px;color:var(--muted)">Settings are saved to this browser. They apply the next time you open a roster.</div>
       </div>
+    </div>
+
+    <!-- REPORTS TAB -->
+    <div id="adminTabReports" style="display:none">
+      <div class="section-title" style="font-size:22px;margin-bottom:4px;">Event Reports</div>
+      <div class="section-sub" style="margin-bottom:12px;">Who paid, who owes, and who didn't show up, saved when you end an event from its roster. Only the 3 most recent reports are kept.</div>
+      <div id="adminReportsList"></div>
     </div>
   </div>
 </div>
@@ -1918,6 +1926,11 @@ function getLocalDateStr(d = new Date()) {
 }
 
 function hasEventEnded(ev) {
+  // A manual "End Event" (see adminEndEvent) always counts as ended,
+  // regardless of the scheduled end time — this is how an admin pulls an
+  // event off the public schedule immediately (e.g. ending it early, or
+  // right as it wraps up) rather than waiting for the clock to catch up.
+  if (ev?.manuallyEnded) return true;
   const end = getEventEndDateTime(ev);
   if (end) return new Date() > end;
   // Can't pin down an exact end time — e.g. a legacy event saved before
@@ -1957,10 +1970,12 @@ function sortEventsForAdminView(list) {
 function renderSchedule() {
   const isAdminUser = !!(currentUser && currentUser.isAdmin);
   // Regular users stop seeing an event the moment its end time passes
-  // (Chicago time); admins keep seeing it indefinitely — old events are
-  // no longer auto-deleted, so admins can review/manage them and remove
-  // them manually (Delete button) whenever they're ready.
-  let events = eventsCache.filter(ev => isAdminUser || !hasEventEnded(ev));
+  // (Chicago time); admins keep seeing it until it's manually ended, so
+  // they can review/manage a just-finished session before ending it —
+  // once "End Event" is clicked (manuallyEnded), it drops off the main
+  // Schedule tab for admins too and lives on in Admin → Events instead,
+  // where it can still be reopened or deleted.
+  let events = eventsCache.filter(ev => !ev.manuallyEnded && (isAdminUser || !hasEventEnded(ev)));
   if (isAdminUser) events = sortEventsForAdminView(events);
   const el = document.getElementById('eventsList');
   if (!el) return;
@@ -2564,9 +2579,18 @@ async function renderRoster() {
             <span id="${gPaidLabelId}" style="font-size:12px;font-weight:700;color:${gPaid ? 'var(--success)' : 'var(--muted)'}">${gPaid ? '✓ Paid' : 'Pending'}</span>
           </label>
         </td>` : '';
+        const gNeedsPay = !!g.needsToPay;
+        const gNeedsPayLabelId = `gnpl-${r.id}-${gi}`;
+        const gNeedsPayCell = isAdmin ? `<td>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
+            <input type="checkbox" ${gNeedsPay ? 'checked' : ''} onchange="adminToggleGuestNeedsPay('${r.id}', '${eventId}', ${gi}, this.checked)"
+              style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer">
+            <span id="${gNeedsPayLabelId}" style="font-size:12px;font-weight:700;color:${gNeedsPay ? 'var(--gold)' : 'var(--muted)'}">${gNeedsPay ? 'Owes' : ''}</span>
+          </label>
+        </td>` : '';
         rows += `<tr id="${gPaidRowId}" style="background:${gPaid && isAdmin ? 'rgba(34,197,94,.06)' : 'rgba(91,111,212,.06)'};border-left:3px solid var(--sky)">
           ${gPaidCell}
-          ${isAdmin ? '<td></td>' : ''}
+          ${gNeedsPayCell}
           <td style="color:var(--muted)">${num++}</td>
           <td style="padding-left:24px"><span style="color:var(--muted)">↳</span> <span style="color:var(--text);font-weight:600">${he(g.name)}</span> <span style="background:rgba(91,111,212,.18);color:var(--sky);border-radius:100px;padding:2px 9px;font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;vertical-align:middle">Guest</span></td>
           ${isAdmin ? '<td></td>' : ''}
@@ -2633,13 +2657,11 @@ async function renderRoster() {
           ${waitRegs.length > 0 ? `<span class="waitlist-badge">⏳ ${waitRegs.length} on waitlist</span>` : ''}
           ${isAdmin ? `<button class="btn btn-outline btn-sm" style="${sortBtnStyle}" onclick="toggleAdminAlphaSort(${!rosterSortAlpha},true);renderRoster()" title="Sort A-Z by first name for easy check-in - groups stay together">${sortBtnLabel}</button>` : ''}
           ${isAdmin ? `<button class="btn btn-outline btn-sm" onclick="toggleSquadsPanel('${eventId}')">👥 Squads &amp; Teams</button>` : ''}
-          ${isAdmin ? `<button class="btn btn-outline btn-sm" onclick="toggleEventReportsPanel()">📋 Reports</button>` : ''}
           ${isAdmin ? `<button class="btn btn-outline btn-sm" style="border-color:var(--danger);color:var(--danger)" onclick="adminEndEvent('${eventId}')">🏁 End Event</button>` : ''}
           ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openAddPlayerModal()">➕ Add Player</button>` : ''}
         </div>
       </div>
       <div id="squadsPanel"></div>
-      <div id="eventReportsPanel"></div>
       ${isAdmin && rosterSortAlpha ? `<div style="padding:7px 20px;background:rgba(255,193,7,.07);border-bottom:1px solid rgba(255,193,7,.25);font-size:12px;color:var(--gold)">🔤 Sorted A–Z by first name — groups stay together for check-in</div>` : ''}
       <div class="roster-table-wrap"><table class="roster-table">
         <thead><tr>
@@ -2668,7 +2690,6 @@ async function renderRoster() {
 
   // Re-render the squads panel if it was open before this refresh
   if (squadsPanelOpen) renderSquadsPanel(eventId);
-  if (eventReportsPanelOpen) renderEventReportsPanel();
 }
 
 // ======================== PER-EVENT ADMIN NOTES ========================
@@ -2712,21 +2733,11 @@ async function saveAdminNotes(eventId, value) {
 // at the moment the admin ends the event. Stored in a top-level
 // 'eventReports' collection, capped at the 3 most recent — older ones are
 // deleted whenever a new one is added, so this never grows unbounded.
-let eventReportsPanelOpen = false;
+// Lives under Admin → Reports (see switchAdminTab).
 let eventReportsCache = null;
 
-function toggleEventReportsPanel() {
-  eventReportsPanelOpen = !eventReportsPanelOpen;
-  if (eventReportsPanelOpen) {
-    renderEventReportsPanel();
-  } else {
-    const panel = document.getElementById('eventReportsPanel');
-    if (panel) panel.innerHTML = '';
-  }
-}
-
 async function renderEventReportsPanel() {
-  const panel = document.getElementById('eventReportsPanel');
+  const panel = document.getElementById('adminReportsList');
   if (!panel) return;
   panel.innerHTML = '<div class="card" style="margin-top:12px;padding:14px 18px;color:var(--muted)">Loading reports…</div>';
   try {
@@ -2776,7 +2787,7 @@ async function adminEndEvent(eventId) {
   const allRegs = regsCache[eventId] || [];
   const mainRegs = allRegs.filter(r => !r.waitlisted);
   if (!mainRegs.length) { showToast('No confirmed players on this roster to record.', true); return; }
-  if (!confirm(`End "${ev?.name || 'this event'}" and save a report of who paid, who owes, and who didn't show up? This is based on the current Paid / Needs to Pay checkboxes and won't change the live roster. Only the 3 most recent reports are kept — the oldest is deleted automatically.`)) return;
+  if (!confirm(`End "${ev?.name || 'this event'}"? This removes it from the schedule (yours included) and saves a report of who paid, who owes, and who didn't show up (based on the current Paid / Needs to Pay checkboxes) under Admin \u2192 Reports. Only the 3 most recent reports are kept — the oldest is deleted automatically. This won't touch the live roster, and you can still find, reopen, or permanently delete the event later from Admin \u2192 Events.`)) return;
 
   const paid = [];
   const owes = [];
@@ -2790,6 +2801,7 @@ async function adminEndEvent(eventId) {
     for (const g of (r.guests || [])) {
       const label = `${g.name} (guest)`;
       if (g.paymentReceived) paid.push(label);
+      else if (g.needsToPay) owes.push(label);
       else noShow.push(label);
     }
   }
@@ -2807,11 +2819,21 @@ async function adminEndEvent(eventId) {
       eventId, eventName: ev?.name || 'Event', eventDate: ev?.date || '',
       endedAt: serverTimestamp(), paid, owes, noShow
     });
-    showToast('Event report saved.');
-    eventReportsPanelOpen = true;
-    renderEventReportsPanel();
+    // Pull the event off the public schedule immediately — see hasEventEnded().
+    await setDoc(doc(db, 'events', eventId), { manuallyEnded: true }, { merge: true });
+    showToast('Event ended — pulled from the schedule and report saved under Admin → Reports.');
   } catch (e) {
     showToast('Could not save event report. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+  }
+}
+
+async function adminReopenEvent(eventId) {
+  if (!currentUser?.isAdmin) return;
+  try {
+    await setDoc(doc(db, 'events', eventId), { manuallyEnded: false }, { merge: true });
+    showToast('Event reopened — back on the public schedule.');
+  } catch (e) {
+    showToast('Could not reopen event. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
   }
 }
 
@@ -3389,6 +3411,50 @@ async function adminToggleGuestPayment(regId, eventId, guestIndex, received) {
     }
     if (rowEl) rowEl.style.background = !received ? 'rgba(34,197,94,.04)' : 'rgba(255,255,255,.01)';
     showToast('Could not update guest payment status. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+  }
+}
+
+async function adminToggleGuestNeedsPay(regId, eventId, guestIndex, needsPay) {
+  const allRegs = regsCache[eventId] || [];
+  const reg = allRegs.find(r => r.id === regId);
+  const prevGuests = reg ? reg.guests : null;
+
+  // 1. Patch regsCache immediately so an unrelated snapshot re-render (from
+  //    some other registration changing) doesn't flash this row back to its
+  //    old state while our transaction is still in flight.
+  if (reg) {
+    reg.guests = (reg.guests || []).map((g, i) => i === guestIndex ? { ...g, needsToPay: needsPay } : g);
+  }
+
+  // 2. Patch the DOM in-place — no table flicker
+  const labelEl = document.getElementById(`gnpl-${regId}-${guestIndex}`);
+  if (labelEl) {
+    labelEl.textContent = needsPay ? 'Owes' : '';
+    labelEl.style.color = needsPay ? 'var(--gold)' : 'var(--muted)';
+  }
+
+  // 3. Persist via a transaction that reads the guests array fresh at write
+  //    time — see adminToggleGuestPayment for why this avoids clobbering
+  //    concurrent toggles.
+  const regRef = doc(db, 'registrations', regId);
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(regRef);
+      if (!snap.exists()) throw new Error('not-found');
+      const guests = snap.data().guests || [];
+      if (guestIndex >= guests.length) throw new Error('not-found');
+      const newGuests = guests.map((g, i) => i === guestIndex ? { ...g, needsToPay: needsPay } : g);
+      tx.set(regRef, { guests: newGuests }, { merge: true });
+    });
+    showToast(needsPay ? 'Guest marked as needing to pay.' : 'Guest marked as not needing to pay.');
+  } catch (e) {
+    // Rollback cache + DOM on failure
+    if (reg) reg.guests = prevGuests;
+    if (labelEl) {
+      labelEl.textContent = !needsPay ? 'Owes' : '';
+      labelEl.style.color = !needsPay ? 'var(--gold)' : 'var(--muted)';
+    }
+    showToast('Could not update guest status. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
   }
 }
 
@@ -4076,11 +4142,14 @@ function switchAdminTab(tab) {
   document.getElementById('adminTabEvents').style.display = tab === 'events' ? '' : 'none';
   document.getElementById('adminTabMembers').style.display = tab === 'members' ? '' : 'none';
   document.getElementById('adminTabSettings').style.display = tab === 'settings' ? '' : 'none';
+  document.getElementById('adminTabReports').style.display = tab === 'reports' ? '' : 'none';
   document.getElementById('admTab1').classList.toggle('active', tab === 'events');
   document.getElementById('admTab2').classList.toggle('active', tab === 'members');
   document.getElementById('admTab3').classList.toggle('active', tab === 'settings');
+  document.getElementById('admTab4').classList.toggle('active', tab === 'reports');
   if (tab === 'members') loadAdminMembers();
   if (tab === 'settings') initAdminSettingsTab();
+  if (tab === 'reports') renderEventReportsPanel();
 }
 
 function openActivityLogModal() {
@@ -4484,16 +4553,18 @@ function renderAdminEvents() {
       const evWaitRegs = evRegs.filter(r => r.waitlisted);
       const taken = evMainRegs.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
       const waitInfo = evWaitRegs.length > 0 ? ` · <span style="color:var(--gold)">⏳ ${evWaitRegs.length} on waitlist</span>` : '';
+      const endedBadge = ev.manuallyEnded ? ` <span style="background:rgba(239,68,68,.15);color:var(--danger);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:700;vertical-align:middle">ENDED</span>` : '';
       return `
       <div class="card" style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center">
         <div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700">${ev.name}</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700">${ev.name}${endedBadge}</div>
           <div style="color:var(--muted);font-size:14px;margin-top:4px">${d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · ${formatEventTimeRange(ev)} · ${ev.location}</div>
           <div style="color:var(--gold);font-size:14px;margin-top:4px">👥 ${taken}/${ev.spots} signed up · $${ev.cost} each${ev.courts ? ` · 🏐 ${ev.courts} court${ev.courts > 1 ? 's' : ''}` : ''}${waitInfo}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <button class="btn btn-outline btn-sm" onclick="showPage('roster');populateRosterSelect();document.getElementById('rosterSelect').value='${ev.id}';renderRoster()">View Roster</button>
           <button class="btn btn-outline btn-sm" onclick="openEditEventModal('${ev.id}')">✏️ Edit</button>
+          ${ev.manuallyEnded ? `<button class="btn btn-outline btn-sm" onclick="adminReopenEvent('${ev.id}')">↺ Reopen</button>` : ''}
           <button class="btn btn-danger btn-sm" onclick="deleteEvent('${ev.id}')">Delete</button>
         </div>
       </div>`;
@@ -4853,8 +4924,8 @@ Object.assign(window, {
   addEvent, deleteEvent, openEditEventModal, submitEditEvent, openEventSignup, confirmSignup, cancelSignup,
   openManageGroup, removeGuestFromSignup, cancelSelfFromGroup,
   addGuestRow, removeGuestRow, selectPayment,
-  renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleNeedsPay, adminToggleGuestPayment, onAdminNotesInput, showPage, openModal, closeModal,
-  toggleEventReportsPanel, adminEndEvent, adminDeleteEventReport,
+  renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleNeedsPay, adminToggleGuestPayment, adminToggleGuestNeedsPay, onAdminNotesInput, showPage, openModal, closeModal,
+  adminEndEvent, adminDeleteEventReport, adminReopenEvent,
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile, openManualPlayerProfile, adjustAttendance, toggleShadowban,
   saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, openIconPicker, selectAvatarIcon, uploadProfilePhoto, switchAvatarTab, handlePhotoFileSelect,
   openAddPlayerModal, submitAddPlayer, switchAddPlayerTab, filterMemberSearch, selectMember, clearSelectedMember,
