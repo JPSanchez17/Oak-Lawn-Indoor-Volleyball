@@ -2633,10 +2633,13 @@ async function renderRoster() {
           ${waitRegs.length > 0 ? `<span class="waitlist-badge">⏳ ${waitRegs.length} on waitlist</span>` : ''}
           ${isAdmin ? `<button class="btn btn-outline btn-sm" style="${sortBtnStyle}" onclick="toggleAdminAlphaSort(${!rosterSortAlpha},true);renderRoster()" title="Sort A-Z by first name for easy check-in - groups stay together">${sortBtnLabel}</button>` : ''}
           ${isAdmin ? `<button class="btn btn-outline btn-sm" onclick="toggleSquadsPanel('${eventId}')">👥 Squads &amp; Teams</button>` : ''}
+          ${isAdmin ? `<button class="btn btn-outline btn-sm" onclick="toggleEventReportsPanel()">📋 Reports</button>` : ''}
+          ${isAdmin ? `<button class="btn btn-outline btn-sm" style="border-color:var(--danger);color:var(--danger)" onclick="adminEndEvent('${eventId}')">🏁 End Event</button>` : ''}
           ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openAddPlayerModal()">➕ Add Player</button>` : ''}
         </div>
       </div>
       <div id="squadsPanel"></div>
+      <div id="eventReportsPanel"></div>
       ${isAdmin && rosterSortAlpha ? `<div style="padding:7px 20px;background:rgba(255,193,7,.07);border-bottom:1px solid rgba(255,193,7,.25);font-size:12px;color:var(--gold)">🔤 Sorted A–Z by first name — groups stay together for check-in</div>` : ''}
       <div class="roster-table-wrap"><table class="roster-table">
         <thead><tr>
@@ -2665,6 +2668,7 @@ async function renderRoster() {
 
   // Re-render the squads panel if it was open before this refresh
   if (squadsPanelOpen) renderSquadsPanel(eventId);
+  if (eventReportsPanelOpen) renderEventReportsPanel();
 }
 
 // ======================== PER-EVENT ADMIN NOTES ========================
@@ -2699,6 +2703,115 @@ async function saveAdminNotes(eventId, value) {
   } catch (e) {
     const statusEl2 = document.getElementById('adminNotesStatus');
     if (statusEl2) { statusEl2.textContent = 'Could not save — try again'; statusEl2.style.color = 'var(--danger)'; }
+  }
+}
+
+// ======================== END-OF-EVENT REPORTS ========================
+// Admin-only snapshots of who paid, who owes, and who didn't show up for a
+// given session, taken from the current Paid / Needs to Pay checkbox state
+// at the moment the admin ends the event. Stored in a top-level
+// 'eventReports' collection, capped at the 3 most recent — older ones are
+// deleted whenever a new one is added, so this never grows unbounded.
+let eventReportsPanelOpen = false;
+let eventReportsCache = null;
+
+function toggleEventReportsPanel() {
+  eventReportsPanelOpen = !eventReportsPanelOpen;
+  if (eventReportsPanelOpen) {
+    renderEventReportsPanel();
+  } else {
+    const panel = document.getElementById('eventReportsPanel');
+    if (panel) panel.innerHTML = '';
+  }
+}
+
+async function renderEventReportsPanel() {
+  const panel = document.getElementById('eventReportsPanel');
+  if (!panel) return;
+  panel.innerHTML = '<div class="card" style="margin-top:12px;padding:14px 18px;color:var(--muted)">Loading reports…</div>';
+  try {
+    const snap = await getDocs(query(collection(db, 'eventReports'), orderBy('endedAt', 'desc'), limit(3)));
+    eventReportsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    panel.innerHTML = '<div class="card" style="margin-top:12px;padding:14px 18px;color:var(--danger)">Could not load reports.</div>';
+    return;
+  }
+  if (!eventReportsCache.length) {
+    panel.innerHTML = '<div class="card" style="margin-top:12px;padding:14px 18px;color:var(--muted)">No saved reports yet. Use "End Event" on a roster to save one.</div>';
+    return;
+  }
+  const listBlock = (title, color, names) => `
+    <div style="flex:1;min-width:140px">
+      <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:4px">${title} (${names.length})</div>
+      ${names.length ? `<div style="font-size:13px;color:var(--text);line-height:1.6">${names.map(n => he(n)).join('<br>')}</div>` : '<div style="font-size:12px;color:var(--muted)">—</div>'}
+    </div>`;
+  panel.innerHTML = eventReportsCache.map(r => `
+    <div class="card" style="margin-top:12px;padding:14px 18px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+        <span style="font-weight:700">${he(r.eventName || 'Event')}${r.eventDate ? ` <span style="color:var(--muted);font-weight:500">· ${he(r.eventDate)}</span>` : ''}</span>
+        <button class="btn btn-danger btn-sm" onclick="adminDeleteEventReport('${r.id}')">Delete</button>
+      </div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap">
+        ${listBlock('✓ Paid', 'var(--success)', r.paid || [])}
+        ${listBlock('Owes', 'var(--gold)', r.owes || [])}
+        ${listBlock('Didn\u2019t Show', 'var(--danger)', r.noShow || [])}
+      </div>
+    </div>`).join('');
+}
+
+async function adminDeleteEventReport(reportId) {
+  if (!confirm('Delete this saved report? This cannot be undone.')) return;
+  try {
+    await deleteDoc(doc(db, 'eventReports', reportId));
+    showToast('Report deleted.');
+    renderEventReportsPanel();
+  } catch (e) {
+    showToast('Could not delete report. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+  }
+}
+
+async function adminEndEvent(eventId) {
+  if (!currentUser?.isAdmin) return;
+  const ev = eventsCache.find(e => e.id === eventId);
+  const allRegs = regsCache[eventId] || [];
+  const mainRegs = allRegs.filter(r => !r.waitlisted);
+  if (!mainRegs.length) { showToast('No confirmed players on this roster to record.', true); return; }
+  if (!confirm(`End "${ev?.name || 'this event'}" and save a report of who paid, who owes, and who didn't show up? This is based on the current Paid / Needs to Pay checkboxes and won't change the live roster. Only the 3 most recent reports are kept — the oldest is deleted automatically.`)) return;
+
+  const paid = [];
+  const owes = [];
+  const noShow = [];
+  for (const r of mainRegs) {
+    const contact = rosterContactCache[r.id] || {};
+    if (contact.paymentReceived) paid.push(r.name);
+    else if (contact.needsToPay) owes.push(r.name);
+    else noShow.push(r.name);
+
+    for (const g of (r.guests || [])) {
+      const label = `${g.name} (guest)`;
+      if (g.paymentReceived) paid.push(label);
+      else noShow.push(label);
+    }
+  }
+
+  try {
+    // Trim first so we never exceed 3: keep the newest 2 existing reports,
+    // delete the rest, then add this one — leaving exactly 3 (or fewer).
+    const existingSnap = await getDocs(query(collection(db, 'eventReports'), orderBy('endedAt', 'asc')));
+    const existingDocs = existingSnap.docs;
+    if (existingDocs.length >= 3) {
+      const toDelete = existingDocs.slice(0, existingDocs.length - 2);
+      await Promise.all(toDelete.map(d => deleteDoc(d.ref)));
+    }
+    await addDoc(collection(db, 'eventReports'), {
+      eventId, eventName: ev?.name || 'Event', eventDate: ev?.date || '',
+      endedAt: serverTimestamp(), paid, owes, noShow
+    });
+    showToast('Event report saved.');
+    eventReportsPanelOpen = true;
+    renderEventReportsPanel();
+  } catch (e) {
+    showToast('Could not save event report. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
   }
 }
 
@@ -4741,6 +4854,7 @@ Object.assign(window, {
   openManageGroup, removeGuestFromSignup, cancelSelfFromGroup,
   addGuestRow, removeGuestRow, selectPayment,
   renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleNeedsPay, adminToggleGuestPayment, onAdminNotesInput, showPage, openModal, closeModal,
+  toggleEventReportsPanel, adminEndEvent, adminDeleteEventReport,
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile, openManualPlayerProfile, adjustAttendance, toggleShadowban,
   saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, openIconPicker, selectAvatarIcon, uploadProfilePhoto, switchAvatarTab, handlePhotoFileSelect,
   openAddPlayerModal, submitAddPlayer, switchAddPlayerTab, filterMemberSearch, selectMember, clearSelectedMember,
