@@ -214,6 +214,24 @@
     margin-bottom: 16px;
   }
 
+  .report-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .report-title { font-weight: 700; }
+  .report-cols { display: flex; gap: 18px; flex-wrap: wrap; }
+  .report-col { flex: 1; min-width: 140px; }
+  @media (max-width: 600px) {
+    .report-header { align-items: flex-start; }
+    .report-header .btn { flex-shrink: 0; }
+    .report-cols { flex-direction: column; gap: 16px; }
+    .report-col { min-width: 0; }
+  }
+
   .event-card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -634,6 +652,14 @@
 
   /* ADMIN MEMBERS TAB */
   .admin-tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+  @media (max-width: 480px) {
+    /* 4 tabs (Events/Members/Settings/Reports) don't fit on one line at
+       phone widths — "Reports" was getting clipped off the edge since the
+       page hides horizontal overflow. Wrap into a 2x2 grid instead so every
+       tab stays fully visible and tappable. */
+    .admin-tabs { flex-wrap: wrap; }
+    .admin-tabs .tab { flex: 1 1 calc(50% - 4px); padding: 10px 4px; font-size: 13px; }
+  }
 
   .bb-filter.active { border-color: var(--sky); color: var(--sky); }
 
@@ -2657,8 +2683,8 @@ async function renderRoster() {
           ${waitRegs.length > 0 ? `<span class="waitlist-badge">⏳ ${waitRegs.length} on waitlist</span>` : ''}
           ${isAdmin ? `<button class="btn btn-outline btn-sm" style="${sortBtnStyle}" onclick="toggleAdminAlphaSort(${!rosterSortAlpha},true);renderRoster()" title="Sort A-Z by first name for easy check-in - groups stay together">${sortBtnLabel}</button>` : ''}
           ${isAdmin ? `<button class="btn btn-outline btn-sm" onclick="toggleSquadsPanel('${eventId}')">👥 Squads &amp; Teams</button>` : ''}
-          ${isAdmin ? `<button class="btn btn-outline btn-sm" style="border-color:var(--danger);color:var(--danger)" onclick="adminEndEvent('${eventId}')">🏁 End Event</button>` : ''}
           ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openAddPlayerModal()">➕ Add Player</button>` : ''}
+          ${isAdmin ? `<button class="btn btn-outline btn-sm" style="border-color:var(--danger);color:var(--danger)" onclick="adminEndEvent('${eventId}')">🏁 End Event</button>` : ''}
         </div>
       </div>
       <div id="squadsPanel"></div>
@@ -2752,17 +2778,17 @@ async function renderEventReportsPanel() {
     return;
   }
   const listBlock = (title, color, names) => `
-    <div style="flex:1;min-width:140px">
+    <div class="report-col">
       <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:4px">${title} (${names.length})</div>
       ${names.length ? `<div style="font-size:13px;color:var(--text);line-height:1.6">${names.map(n => he(n)).join('<br>')}</div>` : '<div style="font-size:12px;color:var(--muted)">—</div>'}
     </div>`;
   panel.innerHTML = eventReportsCache.map(r => `
     <div class="card" style="margin-top:12px;padding:14px 18px">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-        <span style="font-weight:700">${he(r.eventName || 'Event')}${r.eventDate ? ` <span style="color:var(--muted);font-weight:500">· ${he(r.eventDate)}</span>` : ''}</span>
+      <div class="report-header">
+        <span class="report-title">${he(r.eventName || 'Event')}${r.eventDate ? ` <span style="color:var(--muted);font-weight:500">· ${he(r.eventDate)}</span>` : ''}</span>
         <button class="btn btn-danger btn-sm" onclick="adminDeleteEventReport('${r.id}')">Delete</button>
       </div>
-      <div style="display:flex;gap:18px;flex-wrap:wrap">
+      <div class="report-cols">
         ${listBlock('✓ Paid', 'var(--success)', r.paid || [])}
         ${listBlock('Owes', 'var(--gold)', r.owes || [])}
         ${listBlock('Didn\u2019t Show', 'var(--danger)', r.noShow || [])}
