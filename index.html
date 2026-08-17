@@ -2531,8 +2531,18 @@ async function renderRoster() {
         </label>
       </td>` : '';
 
+      const needsPay = !!contact.needsToPay;
+      const needsPayLabelId = `rnpl-${r.id}`;
+      const needsPayCell = isAdmin ? `<td>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
+          <input type="checkbox" ${needsPay ? 'checked' : ''} onchange="adminToggleNeedsPay(\'${r.id}\', \'${eventId}\', this.checked)"     style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer">
+          <span id="${needsPayLabelId}" style="font-size:12px;font-weight:700;color:${needsPay ? 'var(--gold)' : 'var(--muted)'}">${needsPay ? 'Owes' : ''}</span>
+        </label>
+      </td>` : '';
+
       rows += `<tr id="${paidRowId}" style="${paid && isAdmin ? 'background:rgba(34,197,94,.04)' : ''}">
         ${paidCell}
+        ${needsPayCell}
         <td style="color:var(--muted)">${num++}</td>
         <td>${r.uid ? `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${he(r.name)}</strong>` : `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openManualPlayerProfile('${r.id}')" title="View profile">${he(r.name)}</strong>`}</td>
         ${isAdmin ? `<td style="color:var(--muted)">${he(contact.email) || '—'}</td>` : ''}
@@ -2556,6 +2566,7 @@ async function renderRoster() {
         </td>` : '';
         rows += `<tr id="${gPaidRowId}" style="background:${gPaid && isAdmin ? 'rgba(34,197,94,.06)' : 'rgba(91,111,212,.06)'};border-left:3px solid var(--sky)">
           ${gPaidCell}
+          ${isAdmin ? '<td></td>' : ''}
           <td style="color:var(--muted)">${num++}</td>
           <td style="padding-left:24px"><span style="color:var(--muted)">↳</span> <span style="color:var(--text);font-weight:600">${he(g.name)}</span> <span style="background:rgba(91,111,212,.18);color:var(--sky);border-radius:100px;padding:2px 9px;font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;vertical-align:middle">Guest</span></td>
           ${isAdmin ? '<td></td>' : ''}
@@ -2598,6 +2609,7 @@ async function renderRoster() {
       <div class="roster-table-wrap"><table class="roster-table">
         <thead><tr>
           ${isAdmin ? '<th>Paid</th>' : ''}
+          ${isAdmin ? '<th>Needs to Pay</th>' : ''}
           <th>#</th><th>Name</th>
           ${isAdmin ? '<th>Email</th>' : ''}
           ${isAdmin ? '<th>Phone</th>' : ''}
@@ -2629,6 +2641,7 @@ async function renderRoster() {
       <div class="roster-table-wrap"><table class="roster-table">
         <thead><tr>
           ${isAdmin ? '<th>Paid</th>' : ''}
+          ${isAdmin ? '<th>Needs to Pay</th>' : ''}
           <th>#</th><th>Name</th>
           ${isAdmin ? '<th>Email</th>' : ''}
           ${isAdmin ? '<th>Phone</th>' : ''}
@@ -3173,6 +3186,42 @@ async function adminTogglePayment(regId, eventId, received) {
     }
     if (rowEl) rowEl.style.background = !received ? 'rgba(34,197,94,.04)' : '';
     showToast('Could not update payment status. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+  }
+}
+
+async function adminToggleNeedsPay(regId, eventId, needsPay) {
+  // 1. Patch caches so an unrelated snapshot re-render doesn't revert the checkbox.
+  const allRegs = regsCache[eventId] || [];
+  const reg = allRegs.find(r => r.id === regId);
+  if (reg) {
+    if (!reg._contact) reg._contact = {};
+    reg._contact.needsToPay = needsPay;
+  }
+  if (!rosterContactCache[regId]) rosterContactCache[regId] = {};
+  const prevCachedNeedsPay = !!rosterContactCache[regId].needsToPay;
+  rosterContactCache[regId].needsToPay = needsPay;
+
+  // 2. Patch the DOM in-place — no table flicker
+  const labelEl = document.getElementById(`rnpl-${regId}`);
+  if (labelEl) {
+    labelEl.textContent = needsPay ? 'Owes' : '';
+    labelEl.style.color = needsPay ? 'var(--gold)' : 'var(--muted)';
+  }
+
+  // 3. Persist to Firestore
+  const contactRef = doc(db, 'registrations', regId, 'private', 'contact');
+  try {
+    await setDoc(contactRef, { needsToPay: needsPay }, { merge: true });
+    showToast(needsPay ? 'Marked as needing to pay.' : 'Marked as not needing to pay.');
+  } catch (e) {
+    // Rollback cache + DOM on failure
+    if (reg && reg._contact) reg._contact.needsToPay = !needsPay;
+    rosterContactCache[regId].needsToPay = prevCachedNeedsPay;
+    if (labelEl) {
+      labelEl.textContent = !needsPay ? 'Owes' : '';
+      labelEl.style.color = !needsPay ? 'var(--gold)' : 'var(--muted)';
+    }
+    showToast('Could not update status. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
   }
 }
 
@@ -4691,7 +4740,7 @@ Object.assign(window, {
   addEvent, deleteEvent, openEditEventModal, submitEditEvent, openEventSignup, confirmSignup, cancelSignup,
   openManageGroup, removeGuestFromSignup, cancelSelfFromGroup,
   addGuestRow, removeGuestRow, selectPayment,
-  renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleGuestPayment, onAdminNotesInput, showPage, openModal, closeModal,
+  renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleNeedsPay, adminToggleGuestPayment, onAdminNotesInput, showPage, openModal, closeModal,
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile, openManualPlayerProfile, adjustAttendance, toggleShadowban,
   saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, openIconPicker, selectAvatarIcon, uploadProfilePhoto, switchAvatarTab, handlePhotoFileSelect,
   openAddPlayerModal, submitAddPlayer, switchAddPlayerTab, filterMemberSearch, selectMember, clearSelectedMember,
