@@ -772,7 +772,7 @@
     <h1>Open Gym Volleyball</h1>
     <p>Join Oak Lawn's indoor volleyball community — sign up for open gyms, track your spot, and play.</p>
     <div class="hero-btns">
-      <button class="btn btn-primary" onclick="showPage('schedule')">Sign up now!</button>
+      <button class="btn btn-primary" onclick="showPage('schedule')">View Schedule</button>
 
     </div>
   </div>
@@ -1309,26 +1309,20 @@
     <!-- PAYMENT METHOD -->
     <div style="font-weight:700;font-size:15px;margin-bottom:12px">How will you pay?</div>
     <div class="payment-options">
-      <div class="payment-option" id="payOptCash" onclick="selectPayment('cash')">
-        <div class="pay-icon">💵</div>
-        <div class="pay-label">Cash</div>
-        <div class="pay-sub">Pay in person</div>
-      </div>
-      <div class="payment-option" id="payOptVenmo" onclick="selectPayment('venmo')">
+      <div class="payment-option" id="payOptNow" onclick="selectPayment('now')">
         <div class="pay-icon">📱</div>
-        <div class="pay-label">Venmo / Zelle</div>
-        <div class="pay-sub">Send digitally</div>
+        <div class="pay-label">Pay Now</div>
+        <div class="pay-sub">Venmo or Zelle</div>
+      </div>
+      <div class="payment-option" id="payOptDoor" onclick="selectPayment('door')">
+        <div class="pay-icon">🚪</div>
+        <div class="pay-label">Pay at the Door</div>
+        <div class="pay-sub">Cash, Venmo, or Zelle</div>
       </div>
     </div>
 
-    <!-- Cash instructions -->
-    <div class="payment-detail-box" id="cashInstructions">
-      <div style="font-weight:700;color:var(--success);margin-bottom:6px">💵 Pay in Cash</div>
-      <p style="font-size:14px;color:var(--muted)">Check in with Maggie or Jude at the courts when coming in. Click confirm below to save your spot.</p>
-    </div>
-
-    <!-- Venmo/Zelle instructions -->
-    <div class="payment-detail-box" id="venmoInstructions">
+    <!-- Pay Now instructions -->
+    <div class="payment-detail-box" id="payNowInstructions">
       <div style="font-weight:700;color:var(--success);margin-bottom:8px">📱 Venmo or Zelle</div>
       <div style="font-size:14px;color:var(--muted);margin-bottom:12px">Send payment to the organizer's number:</div>
       <div style="background:rgba(255,255,255,.06);border-radius:8px;padding:12px;text-align:center">
@@ -1336,6 +1330,17 @@
         <div style="font-size:12px;color:var(--muted);margin-top:4px">Jude Sanchez — Oak Lawn Volleyball</div>
       </div>
       <p style="font-size:13px;color:var(--muted);margin-top:10px">Once sent, click confirm below.</p>
+    </div>
+
+    <!-- Pay at the Door instructions -->
+    <div class="payment-detail-box" id="payDoorInstructions">
+      <div style="font-weight:700;color:var(--success);margin-bottom:6px">🚪 Pay at the Door</div>
+      <p style="font-size:14px;color:var(--muted);margin-bottom:12px">Check in with Maggie or Jude at the courts when coming in. You can pay with any of the following:</p>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)">
+        <div>💵 Cash</div>
+        <div>📱 Venmo or Zelle to <span style="color:var(--gold);font-weight:700">(708) 953-6658</span></div>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin-top:10px">Click confirm below to save your spot.</p>
     </div>
 
     <div style="margin-top:20px;padding:16px;background:rgba(255,255,255,.03);border:1.5px solid var(--border);border-radius:10px">
@@ -2171,13 +2176,13 @@ function openEventSignup(eventId) {
   document.getElementById('esm-price').textContent = `$${Number(ev.cost).toFixed(2)}`;
   document.getElementById('esm-total-line').textContent = '';
   document.getElementById('guestRows').innerHTML = '';
-  document.getElementById('cashInstructions').classList.remove('show');
-  document.getElementById('venmoInstructions').classList.remove('show');
+  document.getElementById('payNowInstructions').classList.remove('show');
+  document.getElementById('payDoorInstructions').classList.remove('show');
   document.getElementById('confirmSection').style.display = 'none';
   const confirmBtn = document.getElementById('confirmBtn');
   if (confirmBtn) confirmBtn.textContent = isFullNow ? '⏳ Join Waitlist' : '✅ Confirm My Spot';
-  document.getElementById('payOptCash').classList.remove('selected');
-  document.getElementById('payOptVenmo').classList.remove('selected');
+  document.getElementById('payOptNow').classList.remove('selected');
+  document.getElementById('payOptDoor').classList.remove('selected');
   document.getElementById('checkAge').checked = false;
   document.getElementById('checkWaiver').checked = false;
   document.getElementById('squadInput').value = '';
@@ -2237,10 +2242,10 @@ function updatePriceTotal() {
 
 function selectPayment(type) {
   selectedPayment = type;
-  document.getElementById('payOptCash').classList.toggle('selected', type === 'cash');
-  document.getElementById('payOptVenmo').classList.toggle('selected', type === 'venmo');
-  document.getElementById('cashInstructions').classList.toggle('show', type === 'cash');
-  document.getElementById('venmoInstructions').classList.toggle('show', type === 'venmo');
+  document.getElementById('payOptNow').classList.toggle('selected', type === 'now');
+  document.getElementById('payOptDoor').classList.toggle('selected', type === 'door');
+  document.getElementById('payNowInstructions').classList.toggle('show', type === 'now');
+  document.getElementById('payDoorInstructions').classList.toggle('show', type === 'door');
   document.getElementById('confirmSection').style.display = '';
 }
 
@@ -2557,10 +2562,10 @@ async function renderRoster() {
     let num = 1;
     for (const r of regs) {
       const contact = contactByRegId[r.id] || {};
-      const payBadge = contact.paymentMethod === 'cash'
-        ? '<span style="background:rgba(34,197,94,.15);color:var(--success);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">💵 Cash</span>'
-        : contact.paymentMethod === 'venmo'
-        ? '<span style="background:rgba(91,111,212,.15);color:var(--sky);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">📱 Venmo/Zelle</span>'
+      const payBadge = (contact.paymentMethod === 'now' || contact.paymentMethod === 'venmo')
+        ? '<span style="background:rgba(91,111,212,.15);color:var(--sky);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">📱 Pay Now (Venmo/Zelle)</span>'
+        : (contact.paymentMethod === 'door' || contact.paymentMethod === 'cash')
+        ? '<span style="background:rgba(34,197,94,.15);color:var(--success);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">🚪 Pay at Door</span>'
         : '';
       const paid = !!contact.paymentReceived;
       const paidLabelId = `rpl-${r.id}`;
@@ -5080,8 +5085,8 @@ Object.assign(window, {
         <label>Payment Method <span style="color:var(--muted);font-weight:400">(optional)</span></label>
         <select id="apPaymentExisting">
           <option value="">Select...</option>
-          <option value="cash">💵 Cash</option>
-          <option value="venmo">📱 Venmo/Zelle</option>
+          <option value="now">📱 Pay Now (Venmo/Zelle)</option>
+          <option value="door">🚪 Pay at Door</option>
         </select>
       </div>
       <div class="form-group">
@@ -5106,8 +5111,8 @@ Object.assign(window, {
         <label>Payment Method <span style="color:var(--muted);font-weight:400">(optional)</span></label>
         <select id="apPayment">
           <option value="">Select...</option>
-          <option value="cash">💵 Cash</option>
-          <option value="venmo">📱 Venmo/Zelle</option>
+          <option value="now">📱 Pay Now (Venmo/Zelle)</option>
+          <option value="door">🚪 Pay at Door</option>
         </select>
       </div>
       <div class="form-group">
