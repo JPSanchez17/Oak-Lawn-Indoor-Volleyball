@@ -4149,11 +4149,31 @@ async function saveProfile() {
   if (!first || !last) return showToast('First and last name are required.', true);
   if (!phone) return showToast('Please add a phone number so we can contact you.', true);
 
+  const nameChanged = first !== currentUser.firstName || last !== currentUser.lastName;
+
   await setDoc(doc(db, 'users', currentUser.uid), { firstName: first, lastName: last, skill, bio }, { merge: true });
   await setDoc(doc(db, 'users', currentUser.uid, 'private', 'contact'), { email: currentUser.email, phone }, { merge: true });
   currentUser.firstName = first; currentUser.lastName = last; currentUser.phone = phone; currentUser.skill = skill;
   document.getElementById('profileDisplayName').textContent = `${first} ${last}`;
   hidePhoneRequiredBanner();
+
+  // Player lists/rosters read a name snapshot stored on each registration doc at
+  // signup time, not a live lookup against the user's profile. Without this, a
+  // name change never shows up on events the person already signed up for.
+  if (nameChanged) {
+    try {
+      const newName = `${first} ${last}`;
+      const regsSnap = await getDocs(query(collection(db, 'registrations'), where('uid', '==', currentUser.uid)));
+      if (!regsSnap.empty) {
+        const batch = writeBatch(db);
+        regsSnap.forEach(d => batch.update(d.ref, { name: newName }));
+        await batch.commit();
+      }
+    } catch (e) {
+      console.error('Failed to sync name to existing registrations:', e);
+    }
+  }
+
   showToast('Profile saved! ✅');
   afterLogin();
   renderSchedule();
