@@ -2387,12 +2387,16 @@ async function removeGuestFromSignup(regId, eventId, guestIndex) {
   const reg = allRegs.find(r => r.id === regId);
   if (!reg) return;
 
+  const removedGuestName = reg.guests?.[guestIndex]?.name || 'Unknown';
+
   try {
     const newGuests = (reg.guests || []).filter((_, i) => i !== guestIndex);
     await setDoc(doc(db, 'registrations', regId), { guests: newGuests }, { merge: true });
 
     // One spot freed — check waitlist
     await promoteFromWaitlist(eventId);
+
+    logActivity(eventId, 'guest_remove', { name: reg.name, uid: reg.uid, actor: 'self', guests: [removedGuestName] });
 
     showToast('Guest removed.');
     // Refresh the modal with updated data
@@ -3268,6 +3272,7 @@ async function adminRemoveGuest(regId, eventId, guestIndex) {
     const newGuests = (reg.guests || []).filter((_, i) => i !== guestIndex);
     await setDoc(doc(db, 'registrations', regId), { guests: newGuests }, { merge: true });
     if (!reg.waitlisted) await promoteFromWaitlist(eventId, 1);
+    logActivity(eventId, 'admin_remove_guest', { name: reg.name, uid: reg.uid, actor: 'admin', guests: [guestName] });
     showToast(`${guestName} removed.`);
   } catch (e) {
     showToast('Could not remove guest. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
@@ -4219,7 +4224,9 @@ const ACTIVITY_TYPE_META = {
   admin_add:            { icon: '👤', label: 'Added by admin' },
   admin_add_waitlist:   { icon: '👤', label: 'Added to waitlist by admin' },
   admin_remove:         { icon: '🗑️', label: 'Removed by admin' },
-  admin_remove_waitlist:{ icon: '🗑️', label: 'Removed from waitlist by admin' }
+  admin_remove_waitlist:{ icon: '🗑️', label: 'Removed from waitlist by admin' },
+  guest_remove:         { icon: '🚪', label: 'Removed a guest' },
+  admin_remove_guest:   { icon: '🗑️', label: 'Removed a guest by admin' }
 };
 
 function loadActivityLog() {
@@ -4273,7 +4280,12 @@ function renderActivityLog() {
     const when = a.timestamp?.seconds
       ? new Date(a.timestamp.seconds * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
       : 'Just now';
-    const guestNote = a.guests?.length ? ` <span style="color:var(--muted)">+${a.guests.length} guest${a.guests.length > 1 ? 's' : ''}</span>` : '';
+    const isGuestRemoval = a.type === 'guest_remove' || a.type === 'admin_remove_guest';
+    const guestNote = a.guests?.length
+      ? (isGuestRemoval
+          ? ` <span style="color:var(--muted)">— ${a.guests.map(g => he(g)).join(', ')}</span>`
+          : ` <span style="color:var(--muted)">+${a.guests.length} guest${a.guests.length > 1 ? 's' : ''}</span>`)
+      : '';
     const actorNote = a.actor === 'admin' ? ' <span class="badge" style="font-size:10px">ADMIN</span>' : a.actor === 'system' ? ' <span style="font-size:11px;color:var(--muted)">(auto)</span>' : '';
     return `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
