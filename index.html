@@ -3067,7 +3067,7 @@ function buildTeamsSection(eventId, ev, mainRegs) {
           ${isAdmin ? `<button class="btn btn-outline btn-sm" onclick="randomizeRemaining('${eventId}')">🎲 Randomize Remaining</button>` : ''}
         </div>
       </div>
-      ${teams.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">${teamCards}</div>` : `<div style="color:var(--muted);font-size:13px">Setting up team slots…</div>`}
+      ${teams.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">${teamCards}</div>` : `<div style="color:var(--muted);font-size:13px">${isAdmin ? 'Setting up team slots…' : "Team slots haven't been set up yet — check back soon."}</div>`}
       ${unassigned.length ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Not yet on a team (${unassigned.length})</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px">${unassigned.map(r => `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:4px 10px;font-size:12px">${he(r.name)}</span>`).join('')}</div>
@@ -3083,6 +3083,7 @@ async function ensureTeamsExist(eventId, ev) {
   const maxTeams = getMaxTeams(ev);
   if (!maxTeams) return;
   if ((teamsCache[eventId] || []).length > 0) return;
+  if (!currentUser?.isAdmin) return; // only admins can create team docs — see security rules
   if (teamsAutoCreateAttempted.has(eventId)) return;
   teamsAutoCreateAttempted.add(eventId);
   try {
