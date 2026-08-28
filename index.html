@@ -2665,8 +2665,6 @@ async function renderRoster() {
 
   const mainRows = buildRows(displayMainRegs);
 
-  if (ev && getMaxTeams(ev)) await ensureTeamsExist(eventId, ev);
-
   let waitlistSection = '';
   if (waitRegs.length > 0) {
     const waitRows = buildRows(waitRegs);
@@ -3016,13 +3014,17 @@ async function autoAttachSquadmates(eventId) {
 }
 
 // Builds the public "Teams" section shown under an event's player list.
-// Returns '' if the event hasn't opted in (no maxTeams set). All team slots
-// are laid out up front (see ensureTeamsExist) and numbered — no naming or
-// per-team "create" step. Joining is a single click on an open slot.
+// Returns '' if the event hasn't opted in (no maxTeams set). We always show
+// `maxTeams` numbered slots, but a slot only becomes a real Firestore doc
+// the moment someone actually joins it — mirroring the original app's only
+// proven-safe create shape (a team doc is always created with a real,
+// non-null captain who is also its first member). We never create an empty
+// team doc, since that appears to be rejected by the security rules
+// regardless of who's making the request.
 function buildTeamsSection(eventId, ev, mainRegs) {
   const maxTeams = getMaxTeams(ev);
   if (!maxTeams) return '';
-  const teams = teamsCache[eventId] || [];
+  const teams = teamsCache[eventId] || []; // real docs only, sorted by createdAt
   const isAdmin = currentUser?.isAdmin;
   const myReg = myRegForEvent(eventId);
   const myTeam = myReg ? teamForReg(eventId, myReg.id) : null;
@@ -3030,33 +3032,37 @@ function buildTeamsSection(eventId, ev, mainRegs) {
   const unassigned = mainRegs.filter(r => !assignedIds.has(r.id));
   const regById = id => (regsCache[eventId] || []).find(r => r.id === id);
 
-  const teamCards = teams.map((t, i) => {
-    const members = (t.memberRegIds || []).map(regById).filter(Boolean);
+  const slotCount = Math.max(maxTeams, teams.length);
+  const teamCards = [];
+  for (let i = 0; i < slotCount; i++) {
+    const t = teams[i] || null;
+    const teamIdArg = t ? `'${t.id}'` : 'null';
+    const members = t ? (t.memberRegIds || []).map(regById).filter(Boolean) : [];
     const canManage = isAdmin;
     const memberCount = members.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
     const canJoinHere = !!(myReg && !myTeam);
-    return `<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
+    teamCards.push(`<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <span style="font-weight:700;font-size:14px">Team ${i + 1}</span>
         <span style="font-size:12px;color:var(--muted)">${memberCount} player${memberCount === 1 ? '' : 's'}</span>
-        ${isAdmin && members.length ? `<button title="Clear this team" onclick="resetTeamAdmin('${eventId}','${t.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;margin-left:auto">🔄 Reset</button>` : ''}
+        ${isAdmin && t && members.length ? `<button title="Clear this team" onclick="resetTeamAdmin('${eventId}','${t.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;margin-left:auto">🔄 Reset</button>` : ''}
       </div>
       ${members.length ? members.map(r => `<div style="display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0">
           <span style="flex:1">${he(r.name)}</span>
           ${canManage ? `<button title="Remove from team" onclick="removeFromTeam('${eventId}','${t.id}','${r.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;padding:2px 4px">✕</button>` : ''}
         </div>
-        ${(r.guests || []).map(g => `<div style="font-size:12px;color:var(--muted);padding:2px 0 2px 14px">↳ ${he(g.name)} <span style="opacity:.6">(guest)</span></div>`).join('')}`).join('') : ''}
-      ${canJoinHere ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:${members.length ? '8' : '0'}px;width:100%" onclick="joinTeam('${eventId}','${t.id}')">
+        ${(r.guests || []).map(g => `<div style="font-size:12px;color:var(--muted);padding:2px 0 2px 14px">↳ ${he(g.name)} <span style="opacity:.6">(guest)</span></div>`).join('')}`).join('') : `<div style="font-size:12px;color:var(--muted)">No players yet.</div>`}
+      ${canJoinHere ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:8px;width:100%" onclick="joinTeamSlot('${eventId}', ${teamIdArg}, ${i})">
           + Add My Name
-        </button>` : (!members.length ? `<div style="font-size:12px;color:var(--muted)">No players yet.</div>` : '')}
+        </button>` : ''}
       ${canManage && unassigned.length ? `
-        <select id="addToTeam-${t.id}" style="width:100%;margin-top:8px;padding:6px 8px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">
+        <select id="addToTeam-slot-${i}" style="width:100%;margin-top:8px;padding:6px 8px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">
           <option value="">+ Assign player…</option>
           ${unassigned.map(r => `<option value="${r.id}">${he(r.name)}</option>`).join('')}
         </select>
-        <button class="btn btn-outline btn-sm" style="margin-top:6px;width:100%" onclick="addPlayerToTeamFromSelect('${eventId}','${t.id}')">Assign to Team</button>` : ''}
-    </div>`;
-  }).join('');
+        <button class="btn btn-outline btn-sm" style="margin-top:6px;width:100%" onclick="assignPlayerToSlot('${eventId}', ${teamIdArg}, ${i})">Assign to Team</button>` : ''}
+    </div>`);
+  }
 
   return `
     <div class="card" style="margin-top:16px;padding:16px 20px">
@@ -3067,7 +3073,7 @@ function buildTeamsSection(eventId, ev, mainRegs) {
           ${isAdmin ? `<button class="btn btn-outline btn-sm" onclick="randomizeRemaining('${eventId}')">🎲 Randomize Remaining</button>` : ''}
         </div>
       </div>
-      ${teams.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">${teamCards}</div>` : `<div style="color:var(--muted);font-size:13px">${isAdmin ? 'Setting up team slots…' : "Team slots haven't been set up yet — check back soon."}</div>`}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">${teamCards.join('')}</div>
       ${unassigned.length ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Not yet on a team (${unassigned.length})</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px">${unassigned.map(r => `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:4px 10px;font-size:12px">${he(r.name)}</span>`).join('')}</div>
@@ -3075,40 +3081,44 @@ function buildTeamsSection(eventId, ev, mainRegs) {
     </div>`;
 }
 
-// Auto-lays-out all of an event's team slots the first time anyone views
-// its roster, so there's never a "create a team" step — just numbered
-// tables (Team 1, Team 2, ...) that fill in as people join.
-let teamsAutoCreateAttempted = new Set();
-async function ensureTeamsExist(eventId, ev) {
-  const maxTeams = getMaxTeams(ev);
-  if (!maxTeams) return;
-  if ((teamsCache[eventId] || []).length > 0) return;
-  if (!currentUser?.isAdmin) return; // only admins can create team docs — see security rules
-  if (teamsAutoCreateAttempted.has(eventId)) return;
-  teamsAutoCreateAttempted.add(eventId);
-  try {
-    const batch = writeBatch(db);
-    for (let i = 0; i < maxTeams; i++) {
-      const ref = doc(collection(db, 'teams'));
-      batch.set(ref, { eventId, name: `Team ${i + 1}`, captainRegId: null, memberRegIds: [], createdAt: serverTimestamp() });
-    }
-    await batch.commit();
-  } catch (e) {
-    console.error('Could not auto-create team slots', e);
-    teamsAutoCreateAttempted.delete(eventId); // allow a retry later
-  }
-}
-
-async function joinTeam(eventId, teamId) {
+// Joins an existing team (arrayUnion, matches the original working "join"
+// shape), or — if this numbered slot has no doc yet — creates it fresh with
+// the joiner as captain and sole member, exactly like the original app's
+// one-player "create my own team" flow. Never creates an empty team doc.
+async function joinTeamSlot(eventId, teamId, slotIndex) {
   const myReg = myRegForEvent(eventId);
   if (!myReg) return showToast('You need to be signed up for this event to join a team.', true);
   if (teamForReg(eventId, myReg.id)) return showToast("You're already on a team — leave it first.", true);
   try {
-    await updateDoc(doc(db, 'teams', teamId), { memberRegIds: arrayUnion(myReg.id) });
+    if (teamId) {
+      await updateDoc(doc(db, 'teams', teamId), { memberRegIds: arrayUnion(myReg.id) });
+    } else {
+      await addDoc(collection(db, 'teams'), { eventId, name: `Team ${slotIndex + 1}`, captainRegId: myReg.id, memberRegIds: [myReg.id], createdAt: serverTimestamp() });
+    }
     showToast('Joined the team!');
   } catch (e) {
-    console.error('joinTeam failed:', e);
+    console.error('joinTeamSlot failed:', e);
     showToast('Could not join team. ' + (e.code === 'permission-denied' ? 'Permission denied.' : (e.message || 'Try again.')), true);
+  }
+}
+
+// Admin-only equivalent of joinTeamSlot, for placing a specific unassigned
+// player into a slot (existing team or a brand-new one).
+async function assignPlayerToSlot(eventId, teamId, slotIndex) {
+  if (!currentUser?.isAdmin) return;
+  const sel = document.getElementById(`addToTeam-slot-${slotIndex}`);
+  const regId = sel?.value;
+  if (!regId) return;
+  if (teamForReg(eventId, regId)) return showToast('That player is already on a team.', true);
+  try {
+    if (teamId) {
+      await updateDoc(doc(db, 'teams', teamId), { memberRegIds: arrayUnion(regId) });
+    } else {
+      await addDoc(collection(db, 'teams'), { eventId, name: `Team ${slotIndex + 1}`, captainRegId: regId, memberRegIds: [regId], createdAt: serverTimestamp() });
+    }
+    showToast('Player added to team.');
+  } catch (e) {
+    showToast('Could not add player. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
   }
 }
 
@@ -3146,29 +3156,6 @@ async function removeFromTeamInternal(eventId, teamId, regId, showMsg, msg) {
   }
 }
 
-function addPlayerToTeamFromSelect(eventId, teamId) {
-  const sel = document.getElementById(`addToTeam-${teamId}`);
-  const regId = sel?.value;
-  if (!regId) return;
-  addPlayerToTeam(eventId, teamId, regId);
-}
-
-async function addPlayerToTeam(eventId, teamId, regId) {
-  const team = (teamsCache[eventId] || []).find(t => t.id === teamId);
-  if (!team) return;
-  const myReg = myRegForEvent(eventId);
-  const isAdmin = currentUser?.isAdmin;
-  const isCaptain = !!(myReg && team.captainRegId === myReg.id);
-  if (!isAdmin && !isCaptain) return showToast('Only the captain or an admin can do that.', true);
-  if (teamForReg(eventId, regId)) return showToast('That player is already on a team.', true);
-  try {
-    await updateDoc(doc(db, 'teams', teamId), { memberRegIds: arrayUnion(regId) });
-    showToast('Player added to team.');
-  } catch (e) {
-    showToast('Could not add player. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
-  }
-}
-
 // Clears a team's roster back to an empty slot, keeping the numbered team
 // tables fixed rather than deleting/recreating them.
 async function resetTeamAdmin(eventId, teamId) {
@@ -3181,32 +3168,20 @@ async function resetTeamAdmin(eventId, teamId) {
   }
 }
 
-// Admin: fills open spots on existing teams with everyone not yet on a
-// team, keeping "wants to be teamed with" groups together (exact matches
-// only). If no teams exist yet, creates maxTeams empty teams first.
+// Admin: fills open spots on existing teams (and any not-yet-created slots
+// up to maxTeams) with everyone not yet on a team, keeping "wants to be
+// teamed with" groups together (exact matches only). Never creates an empty
+// team doc — a new slot only gets written once it has real members.
 async function randomizeRemaining(eventId) {
   if (!currentUser?.isAdmin) return;
   const ev = eventsCache.find(e => e.id === eventId);
   const maxTeams = getMaxTeams(ev);
   if (!maxTeams) return;
-  let teams = teamsCache[eventId] || [];
+  const existingTeams = teamsCache[eventId] || [];
   const mainRegs = (regsCache[eventId] || []).filter(r => !r.waitlisted);
 
   try {
-    if (teams.length === 0) {
-      if (!confirm(`No teams exist yet — create ${maxTeams} empty teams and fill them randomly?`)) return;
-      const batch = writeBatch(db);
-      const newRefs = [];
-      for (let i = 0; i < maxTeams; i++) {
-        const ref = doc(collection(db, 'teams'));
-        newRefs.push(ref);
-        batch.set(ref, { eventId, name: `Team ${i + 1}`, captainRegId: null, memberRegIds: [], createdAt: serverTimestamp() });
-      }
-      await batch.commit();
-      teams = newRefs.map((ref, i) => ({ id: ref.id, eventId, name: `Team ${i + 1}`, captainRegId: null, memberRegIds: [] }));
-    }
-
-    const assignedIds = new Set(teams.flatMap(t => t.memberRegIds || []));
+    const assignedIds = new Set(existingTeams.flatMap(t => t.memberRegIds || []));
     const unassigned = mainRegs.filter(r => !assignedIds.has(r.id));
     if (!unassigned.length) { showToast('Everyone is already on a team.'); return; }
 
@@ -3214,7 +3189,14 @@ async function randomizeRemaining(eventId) {
     const groupedIds = new Set(groups.flat().map(r => r.id));
     const blocks = [...groups, ...unassigned.filter(r => !groupedIds.has(r.id)).map(r => [r])];
 
-    const weights = teams.map(t => (t.memberRegIds || []).reduce((s, id) => s + regWeight((regsCache[eventId] || []).find(r => r.id === id) || {}), 0));
+    // Slots beyond the existing team docs are "open" (no doc yet) — they're
+    // included as zero-weight targets so randomizing can fill them, but we
+    // only ever write a new doc for a slot that ends up with someone in it
+    // (never an empty one, which the security rules reject).
+    const openSlotCount = Math.max(0, maxTeams - existingTeams.length);
+    const weights = existingTeams.map(t => (t.memberRegIds || []).reduce((s, id) => s + regWeight((regsCache[eventId] || []).find(r => r.id === id) || {}), 0));
+    for (let i = 0; i < openSlotCount; i++) weights.push(0);
+
     const shuffled = blocks
       .sort(() => Math.random() - 0.5)
       .sort((a, b) => {
@@ -3223,7 +3205,7 @@ async function randomizeRemaining(eventId) {
         return wb - wa;
       });
 
-    const assignments = teams.map(() => []);
+    const assignments = weights.map(() => []);
     for (const block of shuffled) {
       const blockWeight = block.reduce((s, r) => s + regWeight(r), 0);
       let target = 0;
@@ -3233,13 +3215,19 @@ async function randomizeRemaining(eventId) {
     }
 
     const batch2 = writeBatch(db);
-    teams.forEach((t, i) => {
+    existingTeams.forEach((t, i) => {
       if (!assignments[i].length) return;
       const newMembers = [...(t.memberRegIds || []), ...assignments[i]];
       const updates = { memberRegIds: newMembers };
       if (!t.captainRegId) updates.captainRegId = newMembers[0];
       batch2.update(doc(db, 'teams', t.id), updates);
     });
+    for (let i = 0; i < openSlotCount; i++) {
+      const slotMembers = assignments[existingTeams.length + i];
+      if (!slotMembers.length) continue; // never create an empty team doc
+      const ref = doc(collection(db, 'teams'));
+      batch2.set(ref, { eventId, name: `Team ${existingTeams.length + i + 1}`, captainRegId: slotMembers[0], memberRegIds: slotMembers, createdAt: serverTimestamp() });
+    }
     await batch2.commit();
     showToast('Remaining players randomized into teams.');
   } catch (e) {
@@ -5002,7 +4990,7 @@ Object.assign(window, {
   removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage, deleteChat,
   toggleAdminAlphaSort,
   renderSquadChips,
-  joinTeam, leaveTeam, removeFromTeam, addPlayerToTeam, addPlayerToTeamFromSelect,
+  joinTeamSlot, assignPlayerToSlot, leaveTeam, removeFromTeam,
   resetTeamAdmin, randomizeRemaining,
   loadActivityLog, renderActivityLog, openActivityLogModal, goToSkillLevelSetting, requestPasswordReset
 });
