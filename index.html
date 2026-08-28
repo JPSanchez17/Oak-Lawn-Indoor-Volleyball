@@ -3007,7 +3007,7 @@ async function autoAttachSquadmates(eventId) {
     const team = teamForReg(eventId, teamedMate.id);
     if (!team) continue;
     try {
-      await updateDoc(doc(db, 'teams', team.id), { memberRegIds: arrayUnion(r.id) });
+      await updateDoc(doc(db, 'teams', team.id), { memberRegIds: arrayUnion(r.id), actingRegId: r.id });
       assignedIds.add(r.id);
     } catch (e) { console.error('auto-attach failed', e); }
   }
@@ -3091,7 +3091,7 @@ async function joinTeamSlot(eventId, teamId, slotIndex) {
   if (teamForReg(eventId, myReg.id)) return showToast("You're already on a team — leave it first.", true);
   try {
     if (teamId) {
-      await updateDoc(doc(db, 'teams', teamId), { memberRegIds: arrayUnion(myReg.id) });
+      await updateDoc(doc(db, 'teams', teamId), { memberRegIds: arrayUnion(myReg.id), actingRegId: myReg.id });
     } else {
       await addDoc(collection(db, 'teams'), { eventId, name: `Team ${slotIndex + 1}`, captainRegId: myReg.id, memberRegIds: [myReg.id], createdAt: serverTimestamp() });
     }
@@ -3147,7 +3147,7 @@ async function removeFromTeamInternal(eventId, teamId, regId, showMsg, msg) {
   try {
     // Team slots are fixed and numbered, so an emptied team stays as an
     // open table rather than being deleted.
-    const updates = { memberRegIds: arrayRemove(regId) };
+    const updates = { memberRegIds: arrayRemove(regId), actingRegId: regId };
     if (team.captainRegId === regId) updates.captainRegId = remaining[0] || null;
     await updateDoc(doc(db, 'teams', teamId), updates);
     if (showMsg) showToast(msg || 'Removed from team.');
