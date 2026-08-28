@@ -3007,7 +3007,9 @@ async function autoAttachSquadmates(eventId) {
     const team = teamForReg(eventId, teamedMate.id);
     if (!team) continue;
     try {
-      await updateDoc(doc(db, 'teams', team.id), { memberRegIds: arrayUnion(r.id), actingRegId: r.id });
+      const updates = { memberRegIds: arrayUnion(r.id), actingRegId: r.id };
+      if (!team.captainRegId) updates.captainRegId = r.id;
+      await updateDoc(doc(db, 'teams', team.id), updates);
       assignedIds.add(r.id);
     } catch (e) { console.error('auto-attach failed', e); }
   }
@@ -3094,7 +3096,13 @@ async function joinTeamSlot(eventId, teamId, slotIndex) {
   if (teamForReg(eventId, myReg.id)) return showToast("You're already on a team — leave it first.", true);
   try {
     if (teamId) {
-      await updateDoc(doc(db, 'teams', teamId), { memberRegIds: arrayUnion(myReg.id), actingRegId: myReg.id });
+      const team = (teamsCache[eventId] || []).find(t => t.id === teamId);
+      const updates = { memberRegIds: arrayUnion(myReg.id), actingRegId: myReg.id };
+      // If the team currently has no captain (e.g. the last member left and
+      // no one has joined since), claim captaincy on join so the team isn't
+      // left permanently unmanageable by anyone but an admin.
+      if (team && !team.captainRegId) updates.captainRegId = myReg.id;
+      await updateDoc(doc(db, 'teams', teamId), updates);
     } else {
       await addDoc(collection(db, 'teams'), { eventId, name: `Team ${slotIndex + 1}`, captainRegId: myReg.id, memberRegIds: [myReg.id], createdAt: serverTimestamp() });
     }
