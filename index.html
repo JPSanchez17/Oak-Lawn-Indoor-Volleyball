@@ -1424,6 +1424,9 @@ let unsubEvents = null;
 let unsubRegistrations = null;
 let unsubActivityLog = null;
 let unsubBulletinLatest = null;
+let teamsCache = {};   // eventId -> array of team docs, sorted by createdAt
+let unsubTeams = null;
+let teamsAutoAttaching = false; // reentrancy guard for the auto-attach pass
 let bulletinLatestTs = 0;
 
 // ======================== FRIENDS / MESSAGES STATE ========================
@@ -2887,9 +2890,9 @@ async function adminReopenEvent(eventId) {
 // allow: create — any signed-in user (capped at maxTeams server-side
 // too, if possible); update — the captain (match their registration's
 // uid) or an admin; delete — an admin.
-let teamsCache = {};   // eventId -> array of team docs, sorted by createdAt
-let unsubTeams = null;
-let teamsAutoAttaching = false; // reentrancy guard for the auto-attach pass
+// (teamsCache / unsubTeams / teamsAutoAttaching are declared up near the
+// other global caches so they're initialized before startPublicListeners()
+// runs — see the top of the file.)
 
 function startTeamsListener() {
   if (unsubTeams) return;
