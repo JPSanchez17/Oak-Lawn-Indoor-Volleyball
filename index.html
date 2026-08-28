@@ -3038,7 +3038,7 @@ function buildTeamsSection(eventId, ev, mainRegs) {
     const t = teams[i] || null;
     const teamIdArg = t ? `'${t.id}'` : 'null';
     const members = t ? (t.memberRegIds || []).map(regById).filter(Boolean) : [];
-    const canManage = isAdmin;
+    const canManage = isAdmin || (t && myReg && t.captainRegId === myReg.id);
     const memberCount = members.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
     const canJoinHere = !!(myReg && !myTeam);
     teamCards.push(`<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
@@ -3105,10 +3105,19 @@ async function joinTeamSlot(eventId, teamId, slotIndex) {
   }
 }
 
-// Admin-only equivalent of joinTeamSlot, for placing a specific unassigned
-// player into a slot (existing team or a brand-new one).
+// Lets an admin OR a team's own captain place a specific unassigned player
+// into a slot. Starting a brand-new slot (no team doc yet) with someone
+// else as the founding member is admin-only — the security rules only
+// allow a create where the caller's own registration is the sole member,
+// so a captain can add teammates to their EXISTING team but can't spin up
+// a new team on someone else's behalf.
 async function assignPlayerToSlot(eventId, teamId, slotIndex) {
-  if (!currentUser?.isAdmin) return;
+  const myReg = myRegForEvent(eventId);
+  const isAdmin = currentUser?.isAdmin;
+  const team = teamId ? (teamsCache[eventId] || []).find(t => t.id === teamId) : null;
+  const isCaptain = !!(myReg && team && team.captainRegId === myReg.id);
+  if (!isAdmin && !isCaptain) return;
+  if (!isAdmin && !teamId) return showToast('Only an admin can start a new team with another player.', true);
   const sel = document.getElementById(`addToTeam-slot-${slotIndex}`);
   const regId = sel?.value;
   if (!regId) return;
