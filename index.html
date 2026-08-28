@@ -1135,8 +1135,8 @@
             <input type="number" id="adm-courts" placeholder="4" min="1">
           </div>
           <div class="form-group">
-            <label>Max Teams <span style="color:var(--muted);font-weight:400">(optional)</span></label>
-            <input type="number" id="adm-maxteams" placeholder="4" min="1">
+            <label>Default Team Size <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+            <input type="number" id="adm-teamsize" placeholder="6" min="2">
           </div>
         </div>
         <div class="form-group">
@@ -1370,8 +1370,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, addDoc, setDoc, getDoc, updateDoc, deleteDoc,
-  query, where, getDocs, onSnapshot, orderBy, limit, serverTimestamp, writeBatch, runTransaction,
-  arrayUnion, arrayRemove
+  query, where, getDocs, onSnapshot, orderBy, limit, serverTimestamp, writeBatch, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getStorage, ref as storageRef, uploadBytes, getDownloadURL
@@ -1840,14 +1839,11 @@ function startPublicListeners() {
     renderSchedule();
     if (currentUser?.isAdmin) renderAdminEvents();
     renderRoster();
-    autoAttachSquadmatesForAllEvents();
     const openGroupModal = document.getElementById('manageGroupModal');
     if (openGroupModal && openGroupModal.classList.contains('open') && currentManageGroupEventId) {
       openManageGroup(currentManageGroupEventId);
     }
   }, (err) => console.error('registrations listener error', err));
-
-  startTeamsListener();
 }
 startPublicListeners();
 
@@ -1861,12 +1857,12 @@ async function addEvent() {
   const spots = parseInt(document.getElementById('adm-spots').value);
   const cost = parseFloat(document.getElementById('adm-cost').value) || 0;
   const courts = parseInt(document.getElementById('adm-courts').value) || null;
-  const maxTeams = parseInt(document.getElementById('adm-maxteams').value) || null;
+  const teamSize = parseInt(document.getElementById('adm-teamsize').value) || null;
   const courtInfo = document.getElementById('adm-court-info').value.trim() || null;
   if (!name || !date || !startTime || !endTime || !location || !spots) return showToast('Fill in all event fields.', true);
   if (endTime <= startTime) return showToast('End time must be after start time.', true);
-  await addDoc(collection(db, 'events'), { name, date, startTime, endTime, location, spots, cost, courts, maxTeams, courtInfo, createdAt: serverTimestamp() });
-  ['adm-name','adm-date','adm-start-time','adm-end-time','adm-location','adm-spots','adm-cost','adm-courts','adm-maxteams'].forEach(id => document.getElementById(id).value = '');
+  await addDoc(collection(db, 'events'), { name, date, startTime, endTime, location, spots, cost, courts, teamSize, courtInfo, createdAt: serverTimestamp() });
+  ['adm-name','adm-date','adm-start-time','adm-end-time','adm-location','adm-spots','adm-cost','adm-courts','adm-teamsize'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('adm-court-info').value = '';
   showToast('Event added!');
 }
@@ -1880,8 +1876,6 @@ async function deleteEvent(id) {
     batch.delete(r.ref);
     batch.delete(doc(db, 'registrations', r.id, 'private', 'contact'));
   });
-  const teamsSnap = await getDocs(query(collection(db, 'teams'), where('eventId', '==', id)));
-  teamsSnap.forEach(t => batch.delete(t.ref));
   await batch.commit();
   showToast('Event deleted.');
 }
@@ -1899,7 +1893,7 @@ function openEditEventModal(eventId) {
   document.getElementById('ee-spots').value = ev.spots ?? '';
   document.getElementById('ee-cost').value = ev.cost ?? '';
   document.getElementById('ee-courts').value = ev.courts ?? '';
-  document.getElementById('ee-maxteams').value = ev.maxTeams ?? '';
+  document.getElementById('ee-teamsize').value = ev.teamSize ?? '';
   document.getElementById('ee-court-info').value = ev.courtInfo || '';
   openModal('editEventModal');
 }
@@ -1917,7 +1911,7 @@ async function submitEditEvent() {
   const spots = parseInt(document.getElementById('ee-spots').value);
   const cost = parseFloat(document.getElementById('ee-cost').value) || 0;
   const courts = parseInt(document.getElementById('ee-courts').value) || null;
-  const maxTeams = parseInt(document.getElementById('ee-maxteams').value) || null;
+  const teamSize = parseInt(document.getElementById('ee-teamsize').value) || null;
   const courtInfo = document.getElementById('ee-court-info').value.trim() || null;
   if (!name || !date || !startTime || !endTime || !location || !spots) return showToast('Fill in all event fields.', true);
   if (endTime <= startTime) return showToast('End time must be after start time.', true);
@@ -1929,7 +1923,7 @@ async function submitEditEvent() {
   }
 
   try {
-    await setDoc(doc(db, 'events', eventId), { name, date, startTime, endTime, location, spots, cost, courts, maxTeams, courtInfo }, { merge: true });
+    await setDoc(doc(db, 'events', eventId), { name, date, startTime, endTime, location, spots, cost, courts, teamSize, courtInfo }, { merge: true });
     closeModal('editEventModal');
     showToast('Event updated! ✅');
   } catch (e) {
@@ -2697,10 +2691,12 @@ async function renderRoster() {
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           ${waitRegs.length > 0 ? `<span class="waitlist-badge">⏳ ${waitRegs.length} on waitlist</span>` : ''}
           ${isAdmin ? `<button class="btn btn-outline btn-sm" style="${sortBtnStyle}" onclick="toggleAdminAlphaSort(${!rosterSortAlpha},true);renderRoster()" title="Sort A-Z by first name for easy check-in - groups stay together">${sortBtnLabel}</button>` : ''}
+          ${isAdmin ? `<button class="btn btn-outline btn-sm" onclick="toggleSquadsPanel('${eventId}')">👥 Squads &amp; Teams</button>` : ''}
           ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openAddPlayerModal()">➕ Add Player</button>` : ''}
           ${isAdmin ? `<button class="btn btn-outline btn-sm" style="border-color:var(--danger);color:var(--danger)" onclick="adminEndEvent('${eventId}')">🏁 End Event</button>` : ''}
         </div>
       </div>
+      <div id="squadsPanel"></div>
       ${isAdmin && rosterSortAlpha ? `<div style="padding:7px 20px;background:rgba(255,193,7,.07);border-bottom:1px solid rgba(255,193,7,.25);font-size:12px;color:var(--gold)">🔤 Sorted A–Z by first name — groups stay together for check-in</div>` : ''}
       <div class="roster-table-wrap"><table class="roster-table">
         <thead><tr>
@@ -2716,7 +2712,6 @@ async function renderRoster() {
         <tbody>${mainRows}</tbody>
       </table></div>
     </div>${waitlistSection}
-    ${buildTeamsSection(eventId, ev, mainRegs)}
     ${isAdmin ? `
     <div class="card" style="margin-top:16px;padding:16px 20px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap">
@@ -2727,6 +2722,9 @@ async function renderRoster() {
         placeholder="Notes for this session — check-in reminders, who owes what, court assignments, etc. Only admins see this, and it stays here across sign-ups."
         style="width:100%;min-height:90px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px;line-height:1.5;resize:vertical">${he(eventId in rosterNotesDraft ? rosterNotesDraft[eventId] : (ev?.adminNotes || ''))}</textarea>
     </div>` : ''}`;
+
+  // Re-render the squads panel if it was open before this refresh
+  if (squadsPanelOpen) renderSquadsPanel(eventId);
 }
 
 // ======================== PER-EVENT ADMIN NOTES ========================
@@ -2874,36 +2872,31 @@ async function adminReopenEvent(eventId) {
   }
 }
 
-// ======================== TEAMS ========================
-// Player-formed teams for events that opt in via ev.maxTeams (the max
-// number of teams allowed to form — not a per-team size cap; teams can
-// hold as many players as sign up). Teams live in the top-level 'teams'
-// collection so everyone sees live rosters: { eventId, name,
-// captainRegId, memberRegIds: [], createdAt }. The captain is whoever's
-// regId is captainRegId; if they leave, the next member is promoted.
-//
-// NOTE: the isAdmin / "am I captain" checks below are UX guards only —
-// for real enforcement, Firestore security rules for 'teams' should
-// allow: create — any signed-in user (capped at maxTeams server-side
-// too, if possible); update — the captain (match their registration's
-// uid) or an admin; delete — an admin.
-let teamsCache = {};   // eventId -> array of team docs, sorted by createdAt
-let unsubTeams = null;
-let teamsAutoAttaching = false; // reentrancy guard for the auto-attach pass
+// ======================== SQUADS & TEAM SHUFFLE ========================
+let squadsPanelOpen = false;
+let manualGroups = {};         // eventId -> array of regId arrays, admin-forced groupings
+let manualGroupBuilderOpen = false; // whether the "create manual group" checklist is showing
+let squadOverrideMap = {};     // regId -> 'confirmed' | 'rejected' for a fuzzy match
+let lastShuffleEventId = null;
+let lastShuffleTeams = null;
+let lastShuffleNumTeams = null;
+let noShowRegIds = {};    // eventId -> Set of regId marked "didn't show up", excluded from future shuffles
+let noShowGuestKeys = {}; // eventId -> Set of "regId::guestName" marked "didn't show up"
 
-function startTeamsListener() {
-  if (unsubTeams) return;
-  unsubTeams = onSnapshot(collection(db, 'teams'), (snap) => {
-    teamsCache = {};
-    snap.docs.forEach(d => {
-      const t = { id: d.id, ...d.data() };
-      if (!teamsCache[t.eventId]) teamsCache[t.eventId] = [];
-      teamsCache[t.eventId].push(t);
-    });
-    Object.values(teamsCache).forEach(list => list.sort((a, b) => ((a.createdAt?.seconds) || 0) - ((b.createdAt?.seconds) || 0)));
-    renderRoster();
-    autoAttachSquadmatesForAllEvents();
-  }, (err) => console.error('teams listener error', err));
+function getNoShowSets(eventId) {
+  if (!noShowRegIds[eventId]) noShowRegIds[eventId] = new Set();
+  if (!noShowGuestKeys[eventId]) noShowGuestKeys[eventId] = new Set();
+  return { regIds: noShowRegIds[eventId], guestKeys: noShowGuestKeys[eventId] };
+}
+
+function toggleSquadsPanel(eventId) {
+  squadsPanelOpen = !squadsPanelOpen;
+  if (squadsPanelOpen) {
+    renderSquadsPanel(eventId);
+  } else {
+    const panel = document.getElementById('squadsPanel');
+    if (panel) panel.innerHTML = '';
+  }
 }
 
 // Simple fuzzy match: normalize, compare full string and first-name-only,
@@ -2917,8 +2910,9 @@ function namesLikelyMatch(typed, rosterName) {
   if (t === r) return { exact: true };
   const tParts = t.split(' ');
   const rParts = r.split(' ');
+  // First name matches and typed last-name initial matches roster last name initial
   if (tParts[0] === rParts[0]) {
-    if (tParts.length === 1) return { exact: false };
+    if (tParts.length === 1) return { exact: false }; // first-name-only match, needs confirmation
     const tLast = tParts[tParts.length - 1];
     const rLast = rParts[rParts.length - 1];
     if (rLast.startsWith(tLast) || tLast.startsWith(rLast)) return { exact: tLast === rLast };
@@ -2926,27 +2920,192 @@ function namesLikelyMatch(typed, rosterName) {
   return false;
 }
 
-// Groups registrants who exact-match each other's "wants to be teamed
-// with" tags (union-find). Only exact matches are used here — auto-attach
-// silently moves a late signup onto a team, so a wrong guess would be a
-// confusing surprise rather than something a person can confirm/reject.
-function computeExactSquads(regs) {
-  const parent = {};
+// Build squad groups from registrations' squadNames by matching against
+// other registrants' actual names. Returns groups of regIds + match confidence.
+function computeSquads(allRegs, eventId) {
+  const regs = allRegs.filter(r => !r.waitlisted);
+  const parent = {}; // union-find
   const find = id => { while (parent[id] && parent[id] !== id) id = parent[id]; return id; };
   const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[rb] = ra; };
   regs.forEach(r => { parent[r.id] = r.id; });
+
+  const uncertainPairs = []; // { fromId, toId, typedName, rosterName, key }
+  const seenUncertainPairKeys = new Set(); // dedupe mutual tags (A tags B AND B tags A)
+
   for (const r of regs) {
     for (const typed of (r.squadNames || [])) {
       for (const other of regs) {
         if (other.id === r.id) continue;
         const match = namesLikelyMatch(typed, other.name);
-        if (match && match.exact) union(r.id, other.id);
+        if (match) {
+          // Unordered key — a mutual tag (A tags B, B tags A) is the same relationship,
+          // so resolving it in one direction must resolve it in the other too.
+          const key = [r.id, other.id].sort().join('__');
+          const overrideKey = squadOverrideMap[key];
+          if (overrideKey === 'rejected') continue;
+          if (match.exact || overrideKey === 'confirmed') {
+            union(r.id, other.id);
+          } else {
+            if (seenUncertainPairKeys.has(key)) continue;
+            seenUncertainPairKeys.add(key);
+            uncertainPairs.push({ fromId: r.id, toId: other.id, typedName: typed, rosterName: other.name, key });
+          }
+        }
       }
     }
   }
+
+  // Admin-created manual groups always win — force these regIds onto the
+  // same team regardless of what anyone typed at signup. Skip ids that
+  // aren't part of this event's current (non-waitlisted) roster anymore,
+  // e.g. someone the admin grouped and then cancelled.
+  const regIdSet = new Set(regs.map(r => r.id));
+  const manualRegIdSet = new Set();
+  for (const group of (manualGroups[eventId] || [])) {
+    const present = group.filter(id => regIdSet.has(id));
+    present.forEach(id => manualRegIdSet.add(id));
+    for (let i = 1; i < present.length; i++) union(present[0], present[i]);
+  }
+
   const groupMap = {};
-  regs.forEach(r => { const root = find(r.id); (groupMap[root] = groupMap[root] || []).push(r); });
-  return Object.values(groupMap).filter(g => g.length > 1);
+  regs.forEach(r => {
+    const root = find(r.id);
+    if (!groupMap[root]) groupMap[root] = [];
+    groupMap[root].push(r);
+  });
+
+  const groups = Object.values(groupMap).filter(g => g.length > 1);
+  return { groups, uncertainPairs, regsById: Object.fromEntries(regs.map(r => [r.id, r])), manualRegIdSet };
+}
+
+function renderSquadsPanel(eventId) {
+  const panel = document.getElementById('squadsPanel');
+  if (!panel) return;
+  const allRegs = regsCache[eventId] || [];
+  const { groups, uncertainPairs, regsById, manualRegIdSet } = computeSquads(allRegs, eventId);
+  const mainRegs = allRegs.filter(r => !r.waitlisted);
+  const headcount = r => 1 + (r.guests?.length || 0);
+  const totalPlayers = mainRegs.reduce((s, r) => s + headcount(r), 0);
+  const inSquadPlayers = groups.flat().reduce((s, r) => s + headcount(r), 0);
+  const unattachedCount = totalPlayers - inSquadPlayers;
+
+  let html = `<div style="padding:16px 20px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)">`;
+
+  if (groups.length === 0 && uncertainPairs.length === 0) {
+    html += `<div style="color:var(--muted);font-size:14px">Nobody has tagged squad-mates for this event yet.</div>`;
+  } else {
+    html += `<div style="font-weight:700;font-size:14px;margin-bottom:10px">Squads detected (${groups.length})</div>`;
+    groups.forEach((g, i) => {
+      const isManualGroup = g.some(r => manualRegIdSet.has(r.id));
+      html += `<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(91,111,212,.1)">
+          <span style="font-size:13px;font-weight:700;color:var(--sky)">Squad ${i + 1}</span>
+          ${isManualGroup ? '<span style="font-size:11px;color:var(--success)" title="Includes an admin-forced grouping">🛠 manual</span>' : ''}
+          <span style="font-size:12px;color:var(--muted);margin-left:auto">${g.reduce((s, r) => s + headcount(r), 0)} players</span>
+        </div>
+        <div style="padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px">
+          ${g.map(r => `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:4px 10px;font-size:12px">${he(r.name)}${manualRegIdSet.has(r.id) ? ' 🛠' : ''}</span>
+            ${(r.guests || []).map(guest => `<span style="background:rgba(255,255,255,.03);border:1px dashed var(--border);border-radius:999px;padding:4px 10px;font-size:12px;color:var(--muted)">${he(guest.name)} <span style="opacity:.6">(guest)</span></span>`).join('')}`).join('')}
+        </div>
+      </div>`;
+    });
+
+    if (uncertainPairs.length > 0) {
+      html += `<div style="font-weight:700;font-size:13px;margin:14px 0 8px;color:var(--gold)">⚠️ Needs confirmation</div>`;
+      uncertainPairs.forEach(p => {
+        html += `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,193,7,.06);border:1px solid rgba(255,193,7,.25);border-radius:8px;margin-bottom:6px;flex-wrap:wrap">
+          <span style="font-size:13px">"${he(p.typedName)}" might be <strong>${he(p.rosterName)}</strong></span>
+          <div style="margin-left:auto;display:flex;gap:6px">
+            <button class="btn btn-outline btn-sm" onclick="resolveSquadMatch('${eventId}','${p.key}','confirmed')">✓ Confirm</button>
+            <button class="btn btn-outline btn-sm" onclick="resolveSquadMatch('${eventId}','${p.key}','rejected')">✕ Not them</button>
+          </div>
+        </div>`;
+      });
+    }
+
+    html += `<div style="font-size:12px;color:var(--muted);margin-top:6px">${inSquadPlayers} of ${totalPlayers} players are in a squad · ${unattachedCount} unattached</div>`;
+  }
+
+  // Manual groups — admin can force any players onto the same team
+  // regardless of what they typed at signup (or if they typed nothing).
+  html += `<div style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="font-weight:700;font-size:13px">🛠 Manual Groups</span>
+      <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="openManualGroupBuilder('${eventId}')">+ Group Players</button>
+    </div>`;
+
+  const myManualGroups = manualGroups[eventId] || [];
+  if (myManualGroups.length === 0 && !manualGroupBuilderOpen) {
+    html += `<div style="color:var(--muted);font-size:13px">No manual groups yet — use this to force specific players onto the same team.</div>`;
+  } else {
+    myManualGroups.forEach((ids, idx) => {
+      const names = ids.map(id => regsById[id]?.name).filter(Boolean);
+      html += `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.25);border-radius:8px;margin-bottom:6px">
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${names.map(n => `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:3px 9px;font-size:12px">${he(n)}</span>`).join('')}</div>
+        <button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="removeManualGroup('${eventId}',${idx})">Ungroup</button>
+      </div>`;
+    });
+  }
+
+  if (manualGroupBuilderOpen) {
+    html += `<div style="margin-top:8px;padding:12px;border:1px dashed var(--border);border-radius:8px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Select 2 or more players to group together:</div>
+      <div style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto">
+        ${mainRegs.map(r => `<label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" class="mgb-check" value="${r.id}"> ${he(r.name)}</label>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-primary btn-sm" onclick="createManualGroup('${eventId}')">Create Group</button>
+        <button class="btn btn-outline btn-sm" onclick="cancelManualGroupBuilder('${eventId}')">Cancel</button>
+      </div>
+    </div>`;
+  }
+  html += `</div>`;
+
+  html += `
+    <div style="display:flex;align-items:center;gap:10px;margin-top:16px;flex-wrap:wrap">
+      <label style="font-size:13px;color:var(--muted)">Number of teams</label>
+      <input type="number" id="numTeamsInput" value="${(lastShuffleEventId === eventId && lastShuffleNumTeams) || 2}" min="2" max="30" style="width:60px;padding:6px 8px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+      <button class="btn btn-primary btn-sm" onclick="shuffleTeams('${eventId}')">🔀 Shuffle Teams</button>
+    </div>
+    <div id="shuffleResults"></div>
+  </div>`;
+
+  panel.innerHTML = html;
+
+  if (lastShuffleEventId === eventId && lastShuffleTeams) {
+    renderShuffleResults(eventId, lastShuffleTeams);
+  }
+}
+
+function openManualGroupBuilder(eventId) {
+  manualGroupBuilderOpen = true;
+  renderSquadsPanel(eventId);
+}
+
+function cancelManualGroupBuilder(eventId) {
+  manualGroupBuilderOpen = false;
+  renderSquadsPanel(eventId);
+}
+
+function createManualGroup(eventId) {
+  const checked = [...document.querySelectorAll('.mgb-check:checked')].map(el => el.value);
+  if (checked.length < 2) { showToast('Select at least 2 players to group.', true); return; }
+  if (!manualGroups[eventId]) manualGroups[eventId] = [];
+  manualGroups[eventId].push(checked);
+  manualGroupBuilderOpen = false;
+  renderSquadsPanel(eventId);
+  showToast("Group created — they'll land on the same team when you shuffle.");
+}
+
+function removeManualGroup(eventId, idx) {
+  if (!manualGroups[eventId]) return;
+  manualGroups[eventId].splice(idx, 1);
+  renderSquadsPanel(eventId);
+}
+
+function resolveSquadMatch(eventId, key, decision) {
+  squadOverrideMap[key] = decision;
+  renderSquadsPanel(eventId);
 }
 
 function regWeight(r) {
@@ -2955,301 +3114,135 @@ function regWeight(r) {
   return 1 + (r.guests?.length || 0);
 }
 
-function getMaxTeams(ev) {
-  // Intentionally does NOT fall back to the old `teamSize` field: that
-  // used to mean "players per team" (e.g. 6 for 6v6), a different concept
-  // from "how many teams can form." Falling back to it would silently
-  // turn on the Teams feature for old events an admin never opted in.
-  return ev?.maxTeams ?? null;
-}
-
-function myRegForEvent(eventId) {
-  if (!currentUser) return null; // guard against uid:undefined false-matching a walk-in reg with no uid
-  return (regsCache[eventId] || []).find(r => r.uid === currentUser.uid && !r.waitlisted);
-}
-
-function teamForReg(eventId, regId) {
-  return (teamsCache[eventId] || []).find(t => (t.memberRegIds || []).includes(regId));
-}
-
-// After any regs/teams change, attach unassigned players to a squadmate's
-// team if a confirmed exact match is already on one — covers guests who
-// signed up under their own registration, and late signups who tagged
-// someone already on a team.
-async function autoAttachSquadmatesForAllEvents() {
-  if (teamsAutoAttaching) return;
-  teamsAutoAttaching = true;
-  try {
-    for (const eventId of Object.keys(teamsCache)) {
-      await autoAttachSquadmates(eventId);
-    }
-  } finally {
-    teamsAutoAttaching = false;
-  }
-}
-
-async function autoAttachSquadmates(eventId) {
-  const teams = teamsCache[eventId] || [];
-  if (!teams.length) return;
-  const regs = (regsCache[eventId] || []).filter(r => !r.waitlisted);
-  const assignedIds = new Set(teams.flatMap(t => t.memberRegIds || []));
-  const unassigned = regs.filter(r => !assignedIds.has(r.id));
-  if (!unassigned.length) return;
-  const groups = computeExactSquads(regs);
-  for (const r of unassigned) {
-    const group = groups.find(g => g.some(m => m.id === r.id));
-    if (!group) continue;
-    const teamedMate = group.find(m => m.id !== r.id && assignedIds.has(m.id));
-    if (!teamedMate) continue;
-    const team = teamForReg(eventId, teamedMate.id);
-    if (!team) continue;
-    try {
-      await updateDoc(doc(db, 'teams', team.id), { memberRegIds: arrayUnion(r.id) });
-      assignedIds.add(r.id);
-    } catch (e) { console.error('auto-attach failed', e); }
-  }
-}
-
-// Builds the public "Teams" section shown under an event's player list.
-// Returns '' if the event hasn't opted in (no maxTeams set).
-function buildTeamsSection(eventId, ev, mainRegs) {
-  const maxTeams = getMaxTeams(ev);
-  if (!maxTeams) return '';
-  const teams = teamsCache[eventId] || [];
-  const isAdmin = currentUser?.isAdmin;
-  const myReg = myRegForEvent(eventId);
-  const myTeam = myReg ? teamForReg(eventId, myReg.id) : null;
-  const assignedIds = new Set(teams.flatMap(t => t.memberRegIds || []));
-  const unassigned = mainRegs.filter(r => !assignedIds.has(r.id));
-  const regById = id => (regsCache[eventId] || []).find(r => r.id === id);
-
-  const teamCards = teams.map((t, i) => {
-    const members = (t.memberRegIds || []).map(regById).filter(Boolean);
-    const isCaptain = !!(myReg && t.captainRegId === myReg.id);
-    const canManage = isAdmin || isCaptain;
-    const memberCount = members.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
-    return `<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <span style="font-weight:700;font-size:14px">${he(t.name || `Team ${String.fromCharCode(65 + i)}`)}</span>
-        <span style="font-size:12px;color:var(--muted)">${memberCount} player${memberCount === 1 ? '' : 's'}</span>
-        ${canManage ? `<button title="Rename team" onclick="renameTeamPrompt('${eventId}','${t.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;margin-left:auto">✏️</button>` : ''}
-        ${isAdmin ? `<button title="Delete team" onclick="deleteTeamAdmin('${eventId}','${t.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px">🗑️</button>` : ''}
-      </div>
-      ${members.length ? members.map(r => `<div style="display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0">
-          <span style="flex:1">${he(r.name)}${t.captainRegId === r.id ? ' <span style="font-size:11px;color:var(--gold)">👑 Captain</span>' : ''}</span>
-          ${canManage ? `<button title="Remove from team" onclick="removeFromTeam('${eventId}','${t.id}','${r.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;padding:2px 4px">✕</button>` : ''}
-        </div>
-        ${(r.guests || []).map(g => `<div style="font-size:12px;color:var(--muted);padding:2px 0 2px 14px">↳ ${he(g.name)} <span style="opacity:.6">(guest)</span></div>`).join('')}`).join('') : `<div style="font-size:12px;color:var(--muted)">No players yet.</div>`}
-      ${myReg && !myTeam ? `<button class="btn btn-outline btn-sm" style="margin-top:8px;width:100%" onclick="joinTeam('${eventId}','${t.id}')">Join This Team</button>` : ''}
-      ${canManage && unassigned.length ? `
-        <select id="addToTeam-${t.id}" style="width:100%;margin-top:8px;padding:6px 8px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">
-          <option value="">+ Add player…</option>
-          ${unassigned.map(r => `<option value="${r.id}">${he(r.name)}</option>`).join('')}
-        </select>
-        <button class="btn btn-outline btn-sm" style="margin-top:6px;width:100%" onclick="addPlayerToTeamFromSelect('${eventId}','${t.id}')">Add to Team</button>` : ''}
-    </div>`;
-  }).join('');
-
-  const canCreate = !!(myReg && !myTeam && teams.length < maxTeams);
-
-  return `
-    <div class="card" style="margin-top:16px;padding:16px 20px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;flex-wrap:wrap">
-        <span style="font-weight:700">🏐 Teams (${teams.length}/${maxTeams})</span>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          ${myTeam ? `<button class="btn btn-outline btn-sm" onclick="leaveTeam('${eventId}','${myTeam.id}')">Leave My Team</button>` : ''}
-          ${canCreate ? `<button class="btn btn-primary btn-sm" onclick="createTeam('${eventId}')">➕ Create Team</button>` : ''}
-          ${isAdmin ? `<button class="btn btn-outline btn-sm" onclick="randomizeRemaining('${eventId}')">🎲 Randomize Remaining</button>` : ''}
-        </div>
-      </div>
-      ${teams.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">${teamCards}</div>` : `<div style="color:var(--muted);font-size:13px">No teams formed yet.${myReg ? ' Be the first to create one!' : ''}</div>`}
-      ${unassigned.length ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
-        <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Not yet on a team (${unassigned.length})</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">${unassigned.map(r => `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:4px 10px;font-size:12px">${he(r.name)}</span>`).join('')}</div>
-      </div>` : ''}
-    </div>`;
-}
-
-async function createTeam(eventId) {
-  const myReg = myRegForEvent(eventId);
-  if (!myReg) return showToast('You need to be signed up for this event to create a team.', true);
-  if (teamForReg(eventId, myReg.id)) return showToast("You're already on a team.", true);
-  const ev = eventsCache.find(e => e.id === eventId);
-  const maxTeams = getMaxTeams(ev);
-  const teams = teamsCache[eventId] || [];
-  if (maxTeams && teams.length >= maxTeams) return showToast(`Max of ${maxTeams} teams already reached.`, true);
-  const defaultName = `Team ${String.fromCharCode(65 + teams.length)}`;
-  const typed = prompt('Team name (optional):', defaultName);
-  if (typed === null) return; // cancelled
-  const name = typed.trim() || defaultName;
-  try {
-    await addDoc(collection(db, 'teams'), { eventId, name, captainRegId: myReg.id, memberRegIds: [myReg.id], createdAt: serverTimestamp() });
-    showToast("Team created — you're the captain!");
-  } catch (e) {
-    showToast('Could not create team. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
-  }
-}
-
-async function joinTeam(eventId, teamId) {
-  const myReg = myRegForEvent(eventId);
-  if (!myReg) return showToast('You need to be signed up for this event to join a team.', true);
-  if (teamForReg(eventId, myReg.id)) return showToast("You're already on a team — leave it first.", true);
-  try {
-    await updateDoc(doc(db, 'teams', teamId), { memberRegIds: arrayUnion(myReg.id) });
-    showToast('Joined the team!');
-  } catch (e) {
-    showToast('Could not join team. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
-  }
-}
-
-async function leaveTeam(eventId, teamId) {
-  const myReg = myRegForEvent(eventId);
-  if (!myReg) return;
-  await removeFromTeamInternal(eventId, teamId, myReg.id, true, 'Left the team.');
-}
-
-async function removeFromTeam(eventId, teamId, regId) {
-  const team = (teamsCache[eventId] || []).find(t => t.id === teamId);
-  if (!team) return;
-  const myReg = myRegForEvent(eventId);
-  const isAdmin = currentUser?.isAdmin;
-  const isCaptain = !!(myReg && team.captainRegId === myReg.id);
-  if (!isAdmin && !isCaptain) return showToast('Only the captain or an admin can do that.', true);
-  const reg = (regsCache[eventId] || []).find(r => r.id === regId);
-  if (!confirm(`Remove ${reg?.name || 'this player'} from the team?`)) return;
-  await removeFromTeamInternal(eventId, teamId, regId, true, 'Removed from team.');
-}
-
-async function removeFromTeamInternal(eventId, teamId, regId, showMsg, msg) {
-  const team = (teamsCache[eventId] || []).find(t => t.id === teamId);
-  if (!team) return;
-  const remaining = (team.memberRegIds || []).filter(id => id !== regId);
-  try {
-    if (remaining.length === 0) {
-      await deleteDoc(doc(db, 'teams', teamId));
-    } else {
-      const updates = { memberRegIds: arrayRemove(regId) };
-      if (team.captainRegId === regId) updates.captainRegId = remaining[0];
-      await updateDoc(doc(db, 'teams', teamId), updates);
-    }
-    if (showMsg) showToast(msg || 'Removed from team.');
-  } catch (e) {
-    showToast('Could not update team. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
-  }
-}
-
-function addPlayerToTeamFromSelect(eventId, teamId) {
-  const sel = document.getElementById(`addToTeam-${teamId}`);
-  const regId = sel?.value;
-  if (!regId) return;
-  addPlayerToTeam(eventId, teamId, regId);
-}
-
-async function addPlayerToTeam(eventId, teamId, regId) {
-  const team = (teamsCache[eventId] || []).find(t => t.id === teamId);
-  if (!team) return;
-  const myReg = myRegForEvent(eventId);
-  const isAdmin = currentUser?.isAdmin;
-  const isCaptain = !!(myReg && team.captainRegId === myReg.id);
-  if (!isAdmin && !isCaptain) return showToast('Only the captain or an admin can do that.', true);
-  if (teamForReg(eventId, regId)) return showToast('That player is already on a team.', true);
-  try {
-    await updateDoc(doc(db, 'teams', teamId), { memberRegIds: arrayUnion(regId) });
-    showToast('Player added to team.');
-  } catch (e) {
-    showToast('Could not add player. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
-  }
-}
-
-function renameTeamPrompt(eventId, teamId) {
-  const team = (teamsCache[eventId] || []).find(t => t.id === teamId);
-  if (!team) return;
-  const myReg = myRegForEvent(eventId);
-  const isAdmin = currentUser?.isAdmin;
-  const isCaptain = !!(myReg && team.captainRegId === myReg.id);
-  if (!isAdmin && !isCaptain) return showToast('Only the captain or an admin can do that.', true);
-  const typed = prompt('New team name:', team.name || '');
-  if (typed === null) return;
-  const trimmed = typed.trim();
-  if (!trimmed) return;
-  setDoc(doc(db, 'teams', teamId), { name: trimmed }, { merge: true }).catch(() => showToast('Could not rename team.', true));
-}
-
-async function deleteTeamAdmin(eventId, teamId) {
-  if (!currentUser?.isAdmin) return;
-  if (!confirm('Delete this team? Its members will be moved back to unassigned.')) return;
-  try {
-    await deleteDoc(doc(db, 'teams', teamId));
-  } catch (e) {
-    showToast('Could not delete team. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
-  }
-}
-
-// Admin: fills open spots on existing teams with everyone not yet on a
-// team, keeping "wants to be teamed with" groups together (exact matches
-// only). If no teams exist yet, creates maxTeams empty teams first.
-async function randomizeRemaining(eventId) {
-  if (!currentUser?.isAdmin) return;
-  const ev = eventsCache.find(e => e.id === eventId);
-  const maxTeams = getMaxTeams(ev);
-  if (!maxTeams) return;
-  let teams = teamsCache[eventId] || [];
-  const mainRegs = (regsCache[eventId] || []).filter(r => !r.waitlisted);
-
-  try {
-    if (teams.length === 0) {
-      if (!confirm(`No teams exist yet — create ${maxTeams} empty teams and fill them randomly?`)) return;
-      const batch = writeBatch(db);
-      const newRefs = [];
-      for (let i = 0; i < maxTeams; i++) {
-        const ref = doc(collection(db, 'teams'));
-        newRefs.push(ref);
-        batch.set(ref, { eventId, name: `Team ${String.fromCharCode(65 + i)}`, captainRegId: null, memberRegIds: [], createdAt: serverTimestamp() });
-      }
-      await batch.commit();
-      teams = newRefs.map((ref, i) => ({ id: ref.id, eventId, name: `Team ${String.fromCharCode(65 + i)}`, captainRegId: null, memberRegIds: [] }));
-    }
-
-    const assignedIds = new Set(teams.flatMap(t => t.memberRegIds || []));
-    const unassigned = mainRegs.filter(r => !assignedIds.has(r.id));
-    if (!unassigned.length) { showToast('Everyone is already on a team.'); return; }
-
-    const groups = computeExactSquads(mainRegs).filter(g => g.every(r => !assignedIds.has(r.id)));
-    const groupedIds = new Set(groups.flat().map(r => r.id));
-    const blocks = [...groups, ...unassigned.filter(r => !groupedIds.has(r.id)).map(r => [r])];
-
-    const weights = teams.map(t => (t.memberRegIds || []).reduce((s, id) => s + regWeight((regsCache[eventId] || []).find(r => r.id === id) || {}), 0));
-    const shuffled = blocks
-      .sort(() => Math.random() - 0.5)
-      .sort((a, b) => {
-        const wa = a.reduce((s, r) => s + regWeight(r), 0);
-        const wb = b.reduce((s, r) => s + regWeight(r), 0);
-        return wb - wa;
-      });
-
-    const assignments = teams.map(() => []);
-    for (const block of shuffled) {
-      const blockWeight = block.reduce((s, r) => s + regWeight(r), 0);
-      let target = 0;
-      for (let i = 1; i < weights.length; i++) if (weights[i] < weights[target]) target = i;
-      assignments[target].push(...block.map(r => r.id));
-      weights[target] += blockWeight;
-    }
-
-    const batch2 = writeBatch(db);
-    teams.forEach((t, i) => {
-      if (!assignments[i].length) return;
-      const newMembers = [...(t.memberRegIds || []), ...assignments[i]];
-      const updates = { memberRegIds: newMembers };
-      if (!t.captainRegId) updates.captainRegId = newMembers[0];
-      batch2.update(doc(db, 'teams', t.id), updates);
+function shuffleTeams(eventId) {
+  const numTeams = Math.max(2, parseInt(document.getElementById('numTeamsInput')?.value, 10) || 2);
+  const { regIds: excludedRegIds, guestKeys: excludedGuestKeys } = getNoShowSets(eventId);
+  const allRegs = (regsCache[eventId] || [])
+    .filter(r => !excludedRegIds.has(r.id))
+    .map(r => {
+      if (!r.guests || r.guests.length === 0) return r;
+      const filteredGuests = r.guests.filter(g => !excludedGuestKeys.has(`${r.id}::${g.name}`));
+      return filteredGuests.length === r.guests.length ? r : { ...r, guests: filteredGuests };
     });
-    await batch2.commit();
-    showToast('Remaining players randomized into teams.');
-  } catch (e) {
-    console.error(e);
-    showToast('Could not randomize teams. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+  const { groups, regsById } = computeSquads(allRegs, eventId);
+  const mainRegs = allRegs.filter(r => !r.waitlisted);
+
+  const groupedIds = new Set(groups.flat().map(r => r.id));
+  const blocks = groups.map(g => g.slice()); // each block stays together
+  const solos = mainRegs.filter(r => !groupedIds.has(r.id)).map(r => [r]);
+
+  // Shuffle for fairness among equal-sized groups, then pack biggest
+  // groups first (largest-first balancing) so large guest parties / squads
+  // don't throw off the balance — squads stay together either way.
+  const shuffledBlocks = [...blocks, ...solos]
+    .sort(() => Math.random() - 0.5)
+    .sort((a, b) => {
+      const wa = a.reduce((s, r) => s + regWeight(r), 0);
+      const wb = b.reduce((s, r) => s + regWeight(r), 0);
+      return wb - wa;
+    });
+  const teams = Array.from({ length: numTeams }, () => ({ regs: [], weight: 0 }));
+
+  for (const block of shuffledBlocks) {
+    const blockWeight = block.reduce((s, r) => s + regWeight(r), 0);
+    // always place the block on whichever team currently has the least weight,
+    // so people get split as evenly as possible across the fixed number of teams
+    const target = teams.reduce((min, t, i) => (teams[i].weight < teams[min].weight ? i : min), 0);
+    teams[target].regs.push(...block.map(r => ({ ...r, guests: r.guests ? [...r.guests] : r.guests, squadIndex: groups.indexOf(groups.find(g => g.includes(r))) })));
+    teams[target].weight += blockWeight;
   }
+
+  lastShuffleEventId = eventId;
+  lastShuffleTeams = teams;
+  lastShuffleNumTeams = numTeams;
+  renderShuffleResults(eventId, teams);
+}
+
+function renderShuffleResults(eventId, teams) {
+  const el = document.getElementById('shuffleResults');
+  if (!el) return;
+  let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:14px">`;
+  teams.forEach((team, i) => {
+    const regs = team.regs;
+    html += `<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">Team ${String.fromCharCode(65 + i)} · ${team.weight}</div>
+      ${regs.map(r => `<div style="display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0">
+          <span style="flex:1">${he(r.name)}${r.squadIndex >= 0 ? ` <span style="font-size:11px;color:var(--sky)">sq ${r.squadIndex + 1}</span>` : ''}</span>
+          <button title="Didn't show up — remove and keep out of future shuffles" onclick="removeRegFromTeam(${i},'${r.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;line-height:1;padding:2px 4px">✕</button>
+        </div>
+        ${(r.guests || []).map((g, gi) => `<div style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0 2px 14px;color:var(--muted)">
+            <span style="flex:1">↳ ${he(g.name)} <span style="opacity:.6">(guest)</span></span>
+            <button title="Didn't show up — remove and keep out of future shuffles" onclick="removeGuestFromTeam(${i},'${r.id}',${gi})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;line-height:1;padding:2px 4px">✕</button>
+          </div>`).join('')}`).join('')}
+    </div>`;
+  });
+  html += `</div>`;
+
+  const { regIds: excludedRegIds, guestKeys: excludedGuestKeys } = getNoShowSets(eventId);
+  if (excludedRegIds.size > 0 || excludedGuestKeys.size > 0) {
+    html += `<div style="margin-top:14px;padding:10px 12px;background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.25);border-radius:8px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Not showing up (kept out of reshuffles)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${[...excludedRegIds].map(id => `<span style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);border-radius:999px;padding:3px 6px 3px 10px;font-size:12px">${he(getRegName(eventId, id))}
+          <button title="Add back for next shuffle" onclick="restoreNoShowReg('${eventId}','${id}')" style="background:none;border:none;color:var(--success);cursor:pointer;font-size:12px;line-height:1;padding:2px 4px">↺</button></span>`).join('')}
+        ${[...excludedGuestKeys].map(key => `<span style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);border-radius:999px;padding:3px 6px 3px 10px;font-size:12px">${he(key.split('::')[1])} <span style="opacity:.6">(guest)</span>
+          <button title="Add back for next shuffle" onclick="restoreNoShowGuest('${eventId}','${encodeURIComponent(key)}')" style="background:none;border:none;color:var(--success);cursor:pointer;font-size:12px;line-height:1;padding:2px 4px">↺</button></span>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+function getRegName(eventId, regId) {
+  const reg = (regsCache[eventId] || []).find(r => r.id === regId);
+  return reg?.name || 'Unknown';
+}
+
+function restoreNoShowReg(eventId, regId) {
+  const { regIds } = getNoShowSets(eventId);
+  regIds.delete(regId);
+  if (lastShuffleEventId === eventId && lastShuffleTeams) renderShuffleResults(eventId, lastShuffleTeams);
+}
+
+function restoreNoShowGuest(eventId, encodedKey) {
+  const key = decodeURIComponent(encodedKey);
+  const { guestKeys } = getNoShowSets(eventId);
+  guestKeys.delete(key);
+  if (lastShuffleEventId === eventId && lastShuffleTeams) renderShuffleResults(eventId, lastShuffleTeams);
+}
+
+function removeRegFromTeam(teamIndex, regId) {
+  if (!lastShuffleTeams || !lastShuffleTeams[teamIndex]) return;
+  const team = lastShuffleTeams[teamIndex];
+  const idx = team.regs.findIndex(r => r.id === regId);
+  if (idx === -1) return;
+  const reg = team.regs[idx];
+  if (!confirm(`Remove ${reg.name} (and any guests they brought) from Team ${String.fromCharCode(65 + teamIndex)}? They'll be left out if you reshuffle, until you add them back.`)) return;
+  const { regIds: excludedRegIds, guestKeys: excludedGuestKeys } = getNoShowSets(lastShuffleEventId);
+  excludedRegIds.add(regId);
+  // any guest of this reg already marked individually is now redundant — the
+  // whole reg (and its guests) is excluded, so drop the orphaned guest tag
+  for (const key of [...excludedGuestKeys]) {
+    if (key.startsWith(`${regId}::`)) excludedGuestKeys.delete(key);
+  }
+  team.weight -= regWeight(reg);
+  team.regs.splice(idx, 1);
+  renderShuffleResults(lastShuffleEventId, lastShuffleTeams);
+}
+
+function removeGuestFromTeam(teamIndex, regId, guestIndex) {
+  if (!lastShuffleTeams || !lastShuffleTeams[teamIndex]) return;
+  const team = lastShuffleTeams[teamIndex];
+  const reg = team.regs.find(r => r.id === regId);
+  if (!reg || !reg.guests || !reg.guests[guestIndex]) return;
+  const guestName = reg.guests[guestIndex].name;
+  if (!confirm(`Remove guest ${guestName} from Team ${String.fromCharCode(65 + teamIndex)}? They'll be left out if you reshuffle, until you add them back.`)) return;
+  const { guestKeys: excludedGuestKeys } = getNoShowSets(lastShuffleEventId);
+  excludedGuestKeys.add(`${regId}::${guestName}`);
+  reg.guests.splice(guestIndex, 1);
+  team.weight -= 1;
+  renderShuffleResults(lastShuffleEventId, lastShuffleTeams);
 }
 
 async function adminRemove(regId, eventId, isWaitlisted) {
@@ -5005,9 +4998,9 @@ Object.assign(window, {
   sendFriendRequest, cancelFriendRequest, declineFriendRequest, acceptFriendRequest,
   removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage, deleteChat,
   toggleAdminAlphaSort,
-  renderSquadChips,
-  createTeam, joinTeam, leaveTeam, removeFromTeam, addPlayerToTeam, addPlayerToTeamFromSelect,
-  renameTeamPrompt, deleteTeamAdmin, randomizeRemaining,
+  renderSquadChips, toggleSquadsPanel, resolveSquadMatch, shuffleTeams,
+  openManualGroupBuilder, cancelManualGroupBuilder, createManualGroup, removeManualGroup,
+  removeRegFromTeam, removeGuestFromTeam, restoreNoShowReg, restoreNoShowGuest,
   loadActivityLog, renderActivityLog, openActivityLogModal, goToSkillLevelSetting, requestPasswordReset
 });
 </script>
@@ -5077,8 +5070,8 @@ Object.assign(window, {
         <input type="number" id="ee-courts" placeholder="4" min="1">
       </div>
       <div class="form-group">
-        <label>Max Teams <span style="color:var(--muted);font-weight:400">(optional)</span></label>
-        <input type="number" id="ee-maxteams" placeholder="4" min="1">
+        <label>Default Team Size <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+        <input type="number" id="ee-teamsize" placeholder="6" min="2">
       </div>
     </div>
     <div class="form-group">
