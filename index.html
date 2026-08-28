@@ -2665,6 +2665,8 @@ async function renderRoster() {
 
   const mainRows = buildRows(displayMainRegs);
 
+  if (ev && getMaxTeams(ev)) await ensureTeamsExist(eventId, ev);
+
   let waitlistSection = '';
   if (waitRegs.length > 0) {
     const waitRows = buildRows(waitRegs);
@@ -3014,7 +3016,9 @@ async function autoAttachSquadmates(eventId) {
 }
 
 // Builds the public "Teams" section shown under an event's player list.
-// Returns '' if the event hasn't opted in (no maxTeams set).
+// Returns '' if the event hasn't opted in (no maxTeams set). All team slots
+// are laid out up front (see ensureTeamsExist) and numbered — no naming or
+// per-team "create" step. Joining is a single click on an open slot.
 function buildTeamsSection(eventId, ev, mainRegs) {
   const maxTeams = getMaxTeams(ev);
   if (!maxTeams) return '';
@@ -3031,41 +3035,41 @@ function buildTeamsSection(eventId, ev, mainRegs) {
     const isCaptain = !!(myReg && t.captainRegId === myReg.id);
     const canManage = isAdmin || isCaptain;
     const memberCount = members.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+    const canJoinHere = !!(myReg && !myTeam);
     return `<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <span style="font-weight:700;font-size:14px">${he(t.name || `Team ${String.fromCharCode(65 + i)}`)}</span>
+        <span style="font-weight:700;font-size:14px">Team ${i + 1}</span>
         <span style="font-size:12px;color:var(--muted)">${memberCount} player${memberCount === 1 ? '' : 's'}</span>
-        ${canManage ? `<button title="Rename team" onclick="renameTeamPrompt('${eventId}','${t.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;margin-left:auto">✏️</button>` : ''}
-        ${isAdmin ? `<button title="Delete team" onclick="deleteTeamAdmin('${eventId}','${t.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px">🗑️</button>` : ''}
+        ${isAdmin && members.length ? `<button title="Clear this team" onclick="resetTeamAdmin('${eventId}','${t.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;margin-left:auto">🔄 Reset</button>` : ''}
       </div>
       ${members.length ? members.map(r => `<div style="display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0">
           <span style="flex:1">${he(r.name)}${t.captainRegId === r.id ? ' <span style="font-size:11px;color:var(--gold)">👑 Captain</span>' : ''}</span>
           ${canManage ? `<button title="Remove from team" onclick="removeFromTeam('${eventId}','${t.id}','${r.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;padding:2px 4px">✕</button>` : ''}
         </div>
-        ${(r.guests || []).map(g => `<div style="font-size:12px;color:var(--muted);padding:2px 0 2px 14px">↳ ${he(g.name)} <span style="opacity:.6">(guest)</span></div>`).join('')}`).join('') : `<div style="font-size:12px;color:var(--muted)">No players yet.</div>`}
-      ${myReg && !myTeam ? `<button class="btn btn-outline btn-sm" style="margin-top:8px;width:100%" onclick="joinTeam('${eventId}','${t.id}')">Join This Team</button>` : ''}
+        ${(r.guests || []).map(g => `<div style="font-size:12px;color:var(--muted);padding:2px 0 2px 14px">↳ ${he(g.name)} <span style="opacity:.6">(guest)</span></div>`).join('')}`).join('') : ''}
+      ${canJoinHere ? `<div onclick="joinTeam('${eventId}','${t.id}')" style="margin-top:${members.length ? '6' : '0'}px;padding:10px 12px;border:1.5px dashed var(--border);border-radius:6px;text-align:center;font-size:13px;color:var(--muted);cursor:pointer;transition:.15s"
+          onmouseover="this.style.borderColor='var(--fire)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+          + Click to add your name
+        </div>` : (!members.length ? `<div style="font-size:12px;color:var(--muted)">No players yet.</div>` : '')}
       ${canManage && unassigned.length ? `
         <select id="addToTeam-${t.id}" style="width:100%;margin-top:8px;padding:6px 8px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">
-          <option value="">+ Add player…</option>
+          <option value="">+ Assign player…</option>
           ${unassigned.map(r => `<option value="${r.id}">${he(r.name)}</option>`).join('')}
         </select>
-        <button class="btn btn-outline btn-sm" style="margin-top:6px;width:100%" onclick="addPlayerToTeamFromSelect('${eventId}','${t.id}')">Add to Team</button>` : ''}
+        <button class="btn btn-outline btn-sm" style="margin-top:6px;width:100%" onclick="addPlayerToTeamFromSelect('${eventId}','${t.id}')">Assign to Team</button>` : ''}
     </div>`;
   }).join('');
-
-  const canCreate = !!(myReg && !myTeam && teams.length < maxTeams);
 
   return `
     <div class="card" style="margin-top:16px;padding:16px 20px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;flex-wrap:wrap">
-        <span style="font-weight:700">🏐 Teams (${teams.length}/${maxTeams})</span>
+        <span style="font-weight:700">🏐 Teams (${maxTeams})</span>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           ${myTeam ? `<button class="btn btn-outline btn-sm" onclick="leaveTeam('${eventId}','${myTeam.id}')">Leave My Team</button>` : ''}
-          ${canCreate ? `<button class="btn btn-primary btn-sm" onclick="createTeam('${eventId}')">➕ Create Team</button>` : ''}
           ${isAdmin ? `<button class="btn btn-outline btn-sm" onclick="randomizeRemaining('${eventId}')">🎲 Randomize Remaining</button>` : ''}
         </div>
       </div>
-      ${teams.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">${teamCards}</div>` : `<div style="color:var(--muted);font-size:13px">No teams formed yet.${myReg ? ' Be the first to create one!' : ''}</div>`}
+      ${teams.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">${teamCards}</div>` : `<div style="color:var(--muted);font-size:13px">Setting up team slots…</div>`}
       ${unassigned.length ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Not yet on a team (${unassigned.length})</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px">${unassigned.map(r => `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:4px 10px;font-size:12px">${he(r.name)}</span>`).join('')}</div>
@@ -3073,23 +3077,26 @@ function buildTeamsSection(eventId, ev, mainRegs) {
     </div>`;
 }
 
-async function createTeam(eventId) {
-  const myReg = myRegForEvent(eventId);
-  if (!myReg) return showToast('You need to be signed up for this event to create a team.', true);
-  if (teamForReg(eventId, myReg.id)) return showToast("You're already on a team.", true);
-  const ev = eventsCache.find(e => e.id === eventId);
+// Auto-lays-out all of an event's team slots the first time anyone views
+// its roster, so there's never a "create a team" step — just numbered
+// tables (Team 1, Team 2, ...) that fill in as people join.
+let teamsAutoCreateAttempted = new Set();
+async function ensureTeamsExist(eventId, ev) {
   const maxTeams = getMaxTeams(ev);
-  const teams = teamsCache[eventId] || [];
-  if (maxTeams && teams.length >= maxTeams) return showToast(`Max of ${maxTeams} teams already reached.`, true);
-  const defaultName = `Team ${String.fromCharCode(65 + teams.length)}`;
-  const typed = prompt('Team name (optional):', defaultName);
-  if (typed === null) return; // cancelled
-  const name = typed.trim() || defaultName;
+  if (!maxTeams) return;
+  if ((teamsCache[eventId] || []).length > 0) return;
+  if (teamsAutoCreateAttempted.has(eventId)) return;
+  teamsAutoCreateAttempted.add(eventId);
   try {
-    await addDoc(collection(db, 'teams'), { eventId, name, captainRegId: myReg.id, memberRegIds: [myReg.id], createdAt: serverTimestamp() });
-    showToast("Team created — you're the captain!");
+    const batch = writeBatch(db);
+    for (let i = 0; i < maxTeams; i++) {
+      const ref = doc(collection(db, 'teams'));
+      batch.set(ref, { eventId, name: `Team ${i + 1}`, captainRegId: null, memberRegIds: [], createdAt: serverTimestamp() });
+    }
+    await batch.commit();
   } catch (e) {
-    showToast('Could not create team. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+    console.error('Could not auto-create team slots', e);
+    teamsAutoCreateAttempted.delete(eventId); // allow a retry later
   }
 }
 
@@ -3097,8 +3104,11 @@ async function joinTeam(eventId, teamId) {
   const myReg = myRegForEvent(eventId);
   if (!myReg) return showToast('You need to be signed up for this event to join a team.', true);
   if (teamForReg(eventId, myReg.id)) return showToast("You're already on a team — leave it first.", true);
+  const team = (teamsCache[eventId] || []).find(t => t.id === teamId);
+  const updates = { memberRegIds: arrayUnion(myReg.id) };
+  if (team && !team.captainRegId) updates.captainRegId = myReg.id; // first to join a slot becomes captain
   try {
-    await updateDoc(doc(db, 'teams', teamId), { memberRegIds: arrayUnion(myReg.id) });
+    await updateDoc(doc(db, 'teams', teamId), updates);
     showToast('Joined the team!');
   } catch (e) {
     showToast('Could not join team. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
@@ -3128,13 +3138,11 @@ async function removeFromTeamInternal(eventId, teamId, regId, showMsg, msg) {
   if (!team) return;
   const remaining = (team.memberRegIds || []).filter(id => id !== regId);
   try {
-    if (remaining.length === 0) {
-      await deleteDoc(doc(db, 'teams', teamId));
-    } else {
-      const updates = { memberRegIds: arrayRemove(regId) };
-      if (team.captainRegId === regId) updates.captainRegId = remaining[0];
-      await updateDoc(doc(db, 'teams', teamId), updates);
-    }
+    // Team slots are fixed and numbered, so an emptied team stays as an
+    // open table rather than being deleted.
+    const updates = { memberRegIds: arrayRemove(regId) };
+    if (team.captainRegId === regId) updates.captainRegId = remaining[0] || null;
+    await updateDoc(doc(db, 'teams', teamId), updates);
     if (showMsg) showToast(msg || 'Removed from team.');
   } catch (e) {
     showToast('Could not update team. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
@@ -3164,27 +3172,15 @@ async function addPlayerToTeam(eventId, teamId, regId) {
   }
 }
 
-function renameTeamPrompt(eventId, teamId) {
-  const team = (teamsCache[eventId] || []).find(t => t.id === teamId);
-  if (!team) return;
-  const myReg = myRegForEvent(eventId);
-  const isAdmin = currentUser?.isAdmin;
-  const isCaptain = !!(myReg && team.captainRegId === myReg.id);
-  if (!isAdmin && !isCaptain) return showToast('Only the captain or an admin can do that.', true);
-  const typed = prompt('New team name:', team.name || '');
-  if (typed === null) return;
-  const trimmed = typed.trim();
-  if (!trimmed) return;
-  setDoc(doc(db, 'teams', teamId), { name: trimmed }, { merge: true }).catch(() => showToast('Could not rename team.', true));
-}
-
-async function deleteTeamAdmin(eventId, teamId) {
+// Clears a team's roster back to an empty slot, keeping the numbered team
+// tables fixed rather than deleting/recreating them.
+async function resetTeamAdmin(eventId, teamId) {
   if (!currentUser?.isAdmin) return;
-  if (!confirm('Delete this team? Its members will be moved back to unassigned.')) return;
+  if (!confirm('Clear this team? All its members will be moved back to unassigned.')) return;
   try {
-    await deleteDoc(doc(db, 'teams', teamId));
+    await updateDoc(doc(db, 'teams', teamId), { captainRegId: null, memberRegIds: [] });
   } catch (e) {
-    showToast('Could not delete team. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+    showToast('Could not reset team. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
   }
 }
 
@@ -3207,10 +3203,10 @@ async function randomizeRemaining(eventId) {
       for (let i = 0; i < maxTeams; i++) {
         const ref = doc(collection(db, 'teams'));
         newRefs.push(ref);
-        batch.set(ref, { eventId, name: `Team ${String.fromCharCode(65 + i)}`, captainRegId: null, memberRegIds: [], createdAt: serverTimestamp() });
+        batch.set(ref, { eventId, name: `Team ${i + 1}`, captainRegId: null, memberRegIds: [], createdAt: serverTimestamp() });
       }
       await batch.commit();
-      teams = newRefs.map((ref, i) => ({ id: ref.id, eventId, name: `Team ${String.fromCharCode(65 + i)}`, captainRegId: null, memberRegIds: [] }));
+      teams = newRefs.map((ref, i) => ({ id: ref.id, eventId, name: `Team ${i + 1}`, captainRegId: null, memberRegIds: [] }));
     }
 
     const assignedIds = new Set(teams.flatMap(t => t.memberRegIds || []));
@@ -5009,8 +5005,8 @@ Object.assign(window, {
   removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage, deleteChat,
   toggleAdminAlphaSort,
   renderSquadChips,
-  createTeam, joinTeam, leaveTeam, removeFromTeam, addPlayerToTeam, addPlayerToTeamFromSelect,
-  renameTeamPrompt, deleteTeamAdmin, randomizeRemaining,
+  joinTeam, leaveTeam, removeFromTeam, addPlayerToTeam, addPlayerToTeamFromSelect,
+  resetTeamAdmin, randomizeRemaining,
   loadActivityLog, renderActivityLog, openActivityLogModal, goToSkillLevelSetting, requestPasswordReset
 });
 </script>
