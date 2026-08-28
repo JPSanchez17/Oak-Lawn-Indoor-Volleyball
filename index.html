@@ -3075,10 +3075,10 @@ function buildTeamsSection(eventId, ev, mainRegs) {
           ${isAdmin ? `<button class="btn btn-outline btn-sm" onclick="randomizeRemaining('${eventId}')">🎲 Randomize Remaining</button>` : ''}
         </div>
       </div>
-      <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px;line-height:1.5">
+      <div style="font-size:12.5px;color:var(--text);margin-bottom:12px;line-height:1.5">
         Pick a team and add your name to be placed with your group ahead of time — anyone left unassigned will be randomized onto the remaining spots closer to the event. Teams aren't final until the event starts and may be adjusted if players end up missing.
       </div>
-      <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px;line-height:1.5">
+      <div style="font-size:12.5px;color:var(--text);margin-bottom:12px;line-height:1.5">
         First player on a team is considered a "Captain" and can add the players they plan to play with to their team. In the event that there is a player your team planned to play with but the team is full, captains can remove players from their teams to add the ones they planned to play with.
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">${teamCards.join('')}</div>
