@@ -3032,8 +3032,7 @@ function buildTeamsSection(eventId, ev, mainRegs) {
 
   const teamCards = teams.map((t, i) => {
     const members = (t.memberRegIds || []).map(regById).filter(Boolean);
-    const isCaptain = !!(myReg && t.captainRegId === myReg.id);
-    const canManage = isAdmin || isCaptain;
+    const canManage = isAdmin;
     const memberCount = members.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
     const canJoinHere = !!(myReg && !myTeam);
     return `<div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
@@ -3043,14 +3042,13 @@ function buildTeamsSection(eventId, ev, mainRegs) {
         ${isAdmin && members.length ? `<button title="Clear this team" onclick="resetTeamAdmin('${eventId}','${t.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;margin-left:auto">🔄 Reset</button>` : ''}
       </div>
       ${members.length ? members.map(r => `<div style="display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0">
-          <span style="flex:1">${he(r.name)}${t.captainRegId === r.id ? ' <span style="font-size:11px;color:var(--gold)">👑 Captain</span>' : ''}</span>
+          <span style="flex:1">${he(r.name)}</span>
           ${canManage ? `<button title="Remove from team" onclick="removeFromTeam('${eventId}','${t.id}','${r.id}')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;padding:2px 4px">✕</button>` : ''}
         </div>
         ${(r.guests || []).map(g => `<div style="font-size:12px;color:var(--muted);padding:2px 0 2px 14px">↳ ${he(g.name)} <span style="opacity:.6">(guest)</span></div>`).join('')}`).join('') : ''}
-      ${canJoinHere ? `<div onclick="joinTeam('${eventId}','${t.id}')" style="margin-top:${members.length ? '6' : '0'}px;padding:10px 12px;border:1.5px dashed var(--border);border-radius:6px;text-align:center;font-size:13px;color:var(--muted);cursor:pointer;transition:.15s"
-          onmouseover="this.style.borderColor='var(--fire)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
-          + Click to add your name
-        </div>` : (!members.length ? `<div style="font-size:12px;color:var(--muted)">No players yet.</div>` : '')}
+      ${canJoinHere ? `<button type="button" class="btn btn-primary btn-sm" style="margin-top:${members.length ? '8' : '0'}px;width:100%" onclick="joinTeam('${eventId}','${t.id}')">
+          + Add My Name
+        </button>` : (!members.length ? `<div style="font-size:12px;color:var(--muted)">No players yet.</div>` : '')}
       ${canManage && unassigned.length ? `
         <select id="addToTeam-${t.id}" style="width:100%;margin-top:8px;padding:6px 8px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">
           <option value="">+ Assign player…</option>
@@ -3104,14 +3102,12 @@ async function joinTeam(eventId, teamId) {
   const myReg = myRegForEvent(eventId);
   if (!myReg) return showToast('You need to be signed up for this event to join a team.', true);
   if (teamForReg(eventId, myReg.id)) return showToast("You're already on a team — leave it first.", true);
-  const team = (teamsCache[eventId] || []).find(t => t.id === teamId);
-  const updates = { memberRegIds: arrayUnion(myReg.id) };
-  if (team && !team.captainRegId) updates.captainRegId = myReg.id; // first to join a slot becomes captain
   try {
-    await updateDoc(doc(db, 'teams', teamId), updates);
+    await updateDoc(doc(db, 'teams', teamId), { memberRegIds: arrayUnion(myReg.id) });
     showToast('Joined the team!');
   } catch (e) {
-    showToast('Could not join team. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+    console.error('joinTeam failed:', e);
+    showToast('Could not join team. ' + (e.code === 'permission-denied' ? 'Permission denied.' : (e.message || 'Try again.')), true);
   }
 }
 
