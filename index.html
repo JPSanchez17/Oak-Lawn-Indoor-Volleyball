@@ -3033,6 +3033,13 @@ function buildTeamsSection(eventId, ev, mainRegs) {
   const assignedIds = new Set(teams.flatMap(t => t.memberRegIds || []));
   const unassigned = mainRegs.filter(r => !assignedIds.has(r.id));
   const regById = id => (regsCache[eventId] || []).find(r => r.id === id);
+  // Squadmates who haven't been auto-attached yet (both still unassigned,
+  // or a typo kept them from matching) — surfaced so an admin can group
+  // them by hand instead of relying on the auto-match alone.
+  const unassignedSquads = computeExactSquads(unassigned);
+  const squadColors = ['#FF6200', '#22C55E', '#5B6FD4', '#EF4444', '#9333EA', '#14B8A6', '#F472B6'];
+  const squadOfId = {};
+  unassignedSquads.forEach((g, gi) => g.forEach(r => squadOfId[r.id] = gi));
 
   const slotCount = Math.max(maxTeams, teams.length);
   const teamCards = [];
@@ -3060,7 +3067,7 @@ function buildTeamsSection(eventId, ev, mainRegs) {
       ${canManage && unassigned.length ? `
         <select id="addToTeam-slot-${i}" style="width:100%;margin-top:8px;padding:6px 8px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px">
           <option value="">+ Assign player…</option>
-          ${unassigned.map(r => `<option value="${r.id}">${he(r.name)}</option>`).join('')}
+          ${unassigned.map(r => `<option value="${r.id}">${isAdmin && squadOfId[r.id] !== undefined ? '🔗 ' : ''}${he(r.name)}</option>`).join('')}
         </select>
         <button class="btn btn-outline btn-sm" style="margin-top:6px;width:100%" onclick="assignPlayerToSlot('${eventId}', ${teamIdArg}, ${i})">Assign to Team</button>` : ''}
     </div>`);
@@ -3082,9 +3089,25 @@ function buildTeamsSection(eventId, ev, mainRegs) {
         First player on a team is considered a "Captain" and can add the players they plan to play with to their team. In the event that there is a player your team planned to play with but the team is full, captains can remove players from their teams to add the ones they planned to play with.
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">${teamCards.join('')}</div>
+      ${isAdmin && unassignedSquads.length ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--gold);margin-bottom:8px;font-weight:700">🔗 Want to play together (${unassignedSquads.length} group${unassignedSquads.length === 1 ? '' : 's'})</div>
+        ${unassignedSquads.map((g, gi) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="width:10px;height:10px;border-radius:50%;background:${squadColors[gi % squadColors.length]};flex-shrink:0"></span>
+          <span style="font-size:13px">${g.map(r => he(r.name)).join(' + ')}</span>
+        </div>`).join('')}
+      </div>` : ''}
       ${unassigned.length ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Not yet on a team (${unassigned.length})</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">${unassigned.map(r => `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:4px 10px;font-size:12px">${he(r.name)}</span>`).join('')}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${unassigned.map(r => {
+          if (!isAdmin) return `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:4px 10px;font-size:12px">${he(r.name)}</span>`;
+          const gi = squadOfId[r.id];
+          const matched = gi !== undefined;
+          const color = matched ? squadColors[gi % squadColors.length] : null;
+          const typed = r.squadNames || [];
+          const tip = matched ? 'Confirmed group — see list above' : (typed.length ? `Typed as wanting to play with: ${typed.join(', ')} (no confirmed match yet — check spelling)` : '');
+          const icon = matched ? '🔗 ' : (typed.length ? '❓ ' : '');
+          return `<span title="${he(tip)}" style="background:${color ? color + '22' : 'rgba(255,255,255,.05)'};border:1px solid ${color || 'transparent'};border-radius:999px;padding:4px 10px;font-size:12px">${icon}${he(r.name)}</span>`;
+        }).join('')}</div>
       </div>` : ''}
     </div>`;
 }
