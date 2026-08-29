@@ -3098,16 +3098,19 @@ function buildTeamsSection(eventId, ev, mainRegs) {
       </div>` : ''}
       ${unassigned.length ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Not yet on a team (${unassigned.length})</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">${unassigned.map(r => {
-          if (!isAdmin) return `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:4px 10px;font-size:12px">${he(r.name)}</span>`;
+        ${!isAdmin ? `
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${unassigned.map(r => `<span style="background:rgba(255,255,255,.05);border-radius:999px;padding:4px 10px;font-size:12px">${he(r.name)}</span>`).join('')}</div>` : `
+        <div style="display:flex;flex-direction:column;gap:6px">${unassigned.map(r => {
           const gi = squadOfId[r.id];
           const matched = gi !== undefined;
           const color = matched ? squadColors[gi % squadColors.length] : null;
           const typed = r.squadNames || [];
-          const tip = matched ? 'Confirmed group — see list above' : (typed.length ? `Typed as wanting to play with: ${typed.join(', ')} (no confirmed match yet — check spelling)` : '');
-          const icon = matched ? '🔗 ' : (typed.length ? '❓ ' : '');
-          return `<span title="${he(tip)}" style="background:${color ? color + '22' : 'rgba(255,255,255,.05)'};border:1px solid ${color || 'transparent'};border-radius:999px;padding:4px 10px;font-size:12px">${icon}${he(r.name)}</span>`;
-        }).join('')}</div>
+          const unmatchedNote = !matched && typed.length ? `❓ wants: ${typed.join(', ')} (no match — check spelling)` : '';
+          return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:${color ? color + '15' : 'rgba(255,255,255,.05)'};border:1px solid ${color || 'transparent'};border-radius:8px;padding:6px 10px">
+            <span style="font-size:13px;font-weight:600">${matched ? '🔗 ' : ''}${he(r.name)}</span>
+            ${unmatchedNote ? `<span style="font-size:11.5px;color:var(--gold)">${he(unmatchedNote)}</span>` : ''}
+          </div>`;
+        }).join('')}</div>`}
       </div>` : ''}
     </div>`;
 }
