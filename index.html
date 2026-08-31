@@ -1063,6 +1063,7 @@
           <option value="BB Level">BB Level</option>
           <option value="B Level">B Level</option>
           <option value="C Level">C Level</option>
+          <option value="Recreational">Recreational</option>
         </select>
       </div>
       <div class="form-group">
@@ -4375,6 +4376,7 @@ async function loadAdminMembers() {
                       <option value="BB Level" ${m.skill === 'BB Level' ? 'selected' : ''}>BB Level</option>
                       <option value="B Level" ${m.skill === 'B Level' ? 'selected' : ''}>B Level</option>
                       <option value="C Level" ${m.skill === 'C Level' ? 'selected' : ''}>C Level</option>
+                      <option value="Recreational" ${m.skill === 'Recreational' ? 'selected' : ''}>Recreational</option>
                     </select></td>
                 <td style="color:var(--muted);font-size:13px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${he(m.bio) || '—'}</td>
                 <td>${m.id === currentUser?.uid ? '' : `<button class="btn btn-danger btn-sm" onclick="deleteMember('${m.id}')">Delete</button>`}</td>
@@ -5155,6 +5157,7 @@ Object.assign(window, {
           <option value="BB Level">BB Level</option>
           <option value="B Level">B Level</option>
           <option value="C Level">C Level</option>
+          <option value="Recreational">Recreational</option>
         </select>
       </div>
       <div class="form-group">
