@@ -1414,6 +1414,7 @@ let regsCache = {};
 let selectedEventId = null;
 let selectedPayment = null;
 let guestCount = 0;
+let guestIdSeq = 0;
 let currentManageGroupEventId = null;
 let adminAddPlayerEventId = null;
 let editingEventId = null;
@@ -2156,6 +2157,7 @@ function openEventSignup(eventId) {
   selectedEventId = eventId;
   selectedPayment = null;
   guestCount = 0;
+  guestIdSeq = 0;
 
   const evRegsNow = regsCache[eventId] || [];
   const mainRegsNow = evRegsNow.filter(r => !r.waitlisted);
@@ -2210,7 +2212,8 @@ function addGuestRow() {
   if (guestCount >= available - 1) return showToast('Not enough spots for more guests.', true);
 
   guestCount++;
-  const idx = guestCount;
+  guestIdSeq++;
+  const idx = guestIdSeq;
   const row = document.createElement('div');
   row.className = 'guest-row';
   row.id = `guestRow${idx}`;
@@ -2228,14 +2231,14 @@ function addGuestRow() {
 function removeGuestRow(idx) {
   const row = document.getElementById(`guestRow${idx}`);
   if (row) row.remove();
-  guestCount = document.querySelectorAll('.guest-row').length;
+  guestCount = document.querySelectorAll('#guestRows .guest-row').length;
   updatePriceTotal();
 }
 
 function updatePriceTotal() {
   const ev = eventsCache.find(e => e.id === selectedEventId);
   if (!ev) return;
-  const guestRows = document.querySelectorAll('.guest-row');
+  const guestRows = document.querySelectorAll('#guestRows .guest-row');
   const total = (1 + guestRows.length) * ev.cost;
   const line = document.getElementById('esm-total-line');
   line.textContent = guestRows.length > 0 ? `Total: $${total.toFixed(2)} for you + ${guestRows.length} guest${guestRows.length > 1 ? 's' : ''}` : '';
@@ -2268,7 +2271,7 @@ async function confirmSignup() {
   if (existing.find(r => r.uid === currentUser.uid)) { showToast("You're already signed up!", true); closeModal('eventSignupModal'); return; }
 
   // Collect guests
-  const guestRows = document.querySelectorAll('.guest-row');
+  const guestRows = document.querySelectorAll('#guestRows .guest-row');
   const guests = [];
   for (const row of guestRows) {
     const idx = row.id.replace('guestRow', '');
@@ -4421,6 +4424,31 @@ async function deleteMember(uid) {
 }
 
 let selectedMemberProfile = null;
+let apGuestCounts = { Existing: 0, New: 0 };
+let apGuestIdSeq = { Existing: 0, New: 0 };
+
+function addApGuestRow(tab) {
+  apGuestCounts[tab]++;
+  apGuestIdSeq[tab]++;
+  const idx = apGuestIdSeq[tab];
+  const row = document.createElement('div');
+  row.className = 'guest-row';
+  row.id = `apGuestRow${tab}${idx}`;
+  row.innerHTML = `
+    <button class="remove-guest" onclick="removeApGuestRow('${tab}', ${idx})">✕</button>
+    <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase">Guest ${idx}</div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Guest Name</label>
+      <input type="text" id="apGuestName${tab}${idx}" placeholder="Full name">
+    </div>`;
+  document.getElementById(`apGuestRows${tab}`).appendChild(row);
+}
+
+function removeApGuestRow(tab, idx) {
+  const row = document.getElementById(`apGuestRow${tab}${idx}`);
+  if (row) row.remove();
+  apGuestCounts[tab] = document.querySelectorAll(`#apGuestRows${tab} .guest-row`).length;
+}
 
 function openAddPlayerModal() {
   if (!currentUser?.isAdmin) return;
@@ -4434,6 +4462,11 @@ function openAddPlayerModal() {
   document.getElementById('apPaymentExisting').value = '';
   document.getElementById('apSquadExisting').value = '';
   document.getElementById('apSquadNew').value = '';
+  // reset guests
+  apGuestCounts = { Existing: 0, New: 0 };
+  apGuestIdSeq = { Existing: 0, New: 0 };
+  document.getElementById('apGuestRowsExisting').innerHTML = '';
+  document.getElementById('apGuestRowsNew').innerHTML = '';
   // reset member search
   clearSelectedMember();
   document.getElementById('apMemberSearch').value = '';
@@ -4526,11 +4559,22 @@ async function submitAddPlayer() {
         .split(',').map(s => s.trim()).filter(Boolean);
       // Check not already registered
       if (existing.find(r => r.uid === m.id)) return showToast(`${fullName} is already on this event.`, true);
+      // Collect guests
+      const guestRowsExisting = document.querySelectorAll('#apGuestRowsExisting .guest-row');
+      const guests = [];
+      for (const row of guestRowsExisting) {
+        const idx = row.id.replace('apGuestRowExisting', '');
+        const name = document.getElementById(`apGuestNameExisting${idx}`)?.value.trim();
+        if (!name) return showToast('Please enter a name for all guests.', true);
+        guests.push({ name });
+      }
+      if (waitlisted && guests.length > 0) return showToast('This event is full — guests aren\'t supported when adding to the waitlist.', true);
+      if (!waitlisted && taken + 1 + guests.length > ev.spots) return showToast('Not enough spots for that many guests.', true);
       const regRef = await addDoc(collection(db, 'registrations'), {
         eventId,
         uid: m.id,
         name: fullName,
-        guests: [],
+        guests,
         squadNames,
         waitlisted,
         manual: true,
@@ -4543,8 +4587,9 @@ async function submitAddPlayer() {
         });
       }
       closeModal('addPlayerModal');
-      logActivity(eventId, waitlisted ? 'admin_add_waitlist' : 'admin_add', { name: fullName, uid: m.id, actor: 'admin' });
-      showToast(waitlisted ? `${fullName} added to the waitlist.` : `${fullName} added to the player list! ✅`);
+      logActivity(eventId, waitlisted ? 'admin_add_waitlist' : 'admin_add', { name: fullName, uid: m.id, actor: 'admin', guests: guests.map(g => g.name) });
+      const guestSuffix = guests.length ? ` +${guests.length} guest${guests.length > 1 ? 's' : ''}` : '';
+      showToast(waitlisted ? `${fullName} added to the waitlist.` : `${fullName}${guestSuffix} added to the player list! ✅`);
     } else {
       // --- New player path ---
       const first = document.getElementById('apFirst').value.trim();
@@ -4556,12 +4601,23 @@ async function submitAddPlayer() {
       const squadNames = (document.getElementById('apSquadNew')?.value || '')
         .split(',').map(s => s.trim()).filter(Boolean);
       if (!first || !last) return showToast('First and last name are required.', true);
+      // Collect guests
+      const guestRowsNew = document.querySelectorAll('#apGuestRowsNew .guest-row');
+      const guests = [];
+      for (const row of guestRowsNew) {
+        const idx = row.id.replace('apGuestRowNew', '');
+        const name = document.getElementById(`apGuestNameNew${idx}`)?.value.trim();
+        if (!name) return showToast('Please enter a name for all guests.', true);
+        guests.push({ name });
+      }
+      if (waitlisted && guests.length > 0) return showToast('This event is full — guests aren\'t supported when adding to the waitlist.', true);
+      if (!waitlisted && taken + 1 + guests.length > ev.spots) return showToast('Not enough spots for that many guests.', true);
       const regRef = await addDoc(collection(db, 'registrations'), {
         eventId,
         uid: null,
         name: `${first} ${last}`,
         skill: skill || null,
-        guests: [],
+        guests,
         squadNames,
         waitlisted,
         manual: true,
@@ -4574,8 +4630,9 @@ async function submitAddPlayer() {
         });
       }
       closeModal('addPlayerModal');
-      logActivity(eventId, waitlisted ? 'admin_add_waitlist' : 'admin_add', { name: `${first} ${last}`, uid: null, actor: 'admin' });
-      showToast(waitlisted ? `${first} ${last} added to the waitlist.` : `${first} ${last} added to the player list! ✅`);
+      logActivity(eventId, waitlisted ? 'admin_add_waitlist' : 'admin_add', { name: `${first} ${last}`, uid: null, actor: 'admin', guests: guests.map(g => g.name) });
+      const guestSuffix = guests.length ? ` +${guests.length} guest${guests.length > 1 ? 's' : ''}` : '';
+      showToast(waitlisted ? `${first} ${last} added to the waitlist.` : `${first} ${last}${guestSuffix} added to the player list! ✅`);
     }
   } catch (e) {
     console.error('submitAddPlayer error:', e);
@@ -4994,6 +5051,7 @@ Object.assign(window, {
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile, openManualPlayerProfile, adjustAttendance, toggleShadowban,
   saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, openIconPicker, selectAvatarIcon, uploadProfilePhoto, switchAvatarTab, handlePhotoFileSelect,
   openAddPlayerModal, submitAddPlayer, switchAddPlayerTab, filterMemberSearch, selectMember, clearSelectedMember,
+  addApGuestRow, removeApGuestRow,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
   openBulletinThread, submitBulletinReply, deleteBulletinReply,
   openWaiverModal, unlockWaiverCheckbox,
@@ -5123,6 +5181,14 @@ Object.assign(window, {
           <option value="door">🚪 Pay at Door</option>
         </select>
       </div>
+      <!-- GUESTS -->
+      <div style="margin:14px 0">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-weight:700;font-size:15px">Bringing guests?</div>
+          <button class="btn btn-outline btn-sm" onclick="addApGuestRow('Existing')">+ Add Guest</button>
+        </div>
+        <div id="apGuestRowsExisting"></div>
+      </div>
       <div class="form-group">
         <label>Wants to be teamed with <span style="color:var(--muted);font-weight:400">(optional)</span></label>
         <input type="text" id="apSquadExisting" placeholder="e.g. Bob Martinez, Carlos Reyes"
@@ -5159,6 +5225,14 @@ Object.assign(window, {
           <option value="C Level">C Level</option>
           <option value="Recreational">Recreational</option>
         </select>
+      </div>
+      <!-- GUESTS -->
+      <div style="margin:14px 0">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-weight:700;font-size:15px">Bringing guests?</div>
+          <button class="btn btn-outline btn-sm" onclick="addApGuestRow('New')">+ Add Guest</button>
+        </div>
+        <div id="apGuestRowsNew"></div>
       </div>
       <div class="form-group">
         <label>Wants to be teamed with <span style="color:var(--muted);font-weight:400">(optional)</span></label>
