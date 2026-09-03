@@ -4369,8 +4369,15 @@ async function loadAdminMembers() {
           <tbody>
             ${members.map(m => `
               <tr>
-                <td>${avatarHtml(m.avatarUrl || '', 36)}</td>
-                <td><strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${m.id}')" title="View profile">${he(m.firstName || '')} ${he(m.lastName || '')}</strong></td>
+                <td><span style="cursor:pointer" onclick="openPlayerProfile('${m.id}')" title="View profile">${avatarHtml(m.avatarUrl || '', 36)}</span></td>
+                <td style="white-space:nowrap">
+                  <input type="text" value="${he(m.firstName || '')}" placeholder="First"
+                    onchange="adminUpdateMemberName('${m.id}', 'firstName', this.value)"
+                    style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 6px;font-size:13px;width:80px;margin-right:4px">
+                  <input type="text" value="${he(m.lastName || '')}" placeholder="Last"
+                    onchange="adminUpdateMemberName('${m.id}', 'lastName', this.value)"
+                    style="background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 6px;font-size:13px;width:80px">
+                </td>
                 <td style="color:var(--muted)">${he(m.email) || '—'}</td>
                 <td style="color:var(--gold)">${he(m.phone) || '—'}</td>
                 <td><select onchange="adminUpdateMemberSkill('${m.id}', this.value)" style="background:var(--card);border:1px solid var(--border);color:var(--sky);border-radius:4px;padding:3px 6px;font-size:12px;font-weight:600">
@@ -4400,6 +4407,28 @@ async function adminUpdateMemberSkill(uid, skill) {
   } catch (e) {
     console.error('adminUpdateMemberSkill error:', e);
     showToast("Could not update that member's skill level.", true);
+    loadAdminMembers();
+  }
+}
+
+async function adminUpdateMemberName(uid, field, rawValue) {
+  if (!currentUser?.isAdmin) return;
+  const value = rawValue.trim();
+  const member = adminMembersCache.find(m => m.id === uid);
+  const prevName = `${member?.firstName || ''} ${member?.lastName || ''}`.trim() || 'this member';
+  if (!value) {
+    showToast('Name cannot be blank.', true);
+    loadAdminMembers();
+    return;
+  }
+  try {
+    await setDoc(doc(db, 'users', uid), { [field]: value }, { merge: true });
+    if (member) member[field] = value;
+    if (uid === currentUser.uid) { currentUser[field] = value; renderSchedule(); }
+    showToast(`Updated ${prevName}'s name.`);
+  } catch (e) {
+    console.error('adminUpdateMemberName error:', e);
+    showToast("Could not update that member's name.", true);
     loadAdminMembers();
   }
 }
@@ -5049,7 +5078,7 @@ Object.assign(window, {
   renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleNeedsPay, adminToggleGuestPayment, adminToggleGuestNeedsPay, onAdminNotesInput, showPage, openModal, closeModal,
   adminEndEvent, adminDeleteEventReport, adminReopenEvent,
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile, openManualPlayerProfile, adjustAttendance, toggleShadowban,
-  saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, openIconPicker, selectAvatarIcon, uploadProfilePhoto, switchAvatarTab, handlePhotoFileSelect,
+  saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, adminUpdateMemberName, openIconPicker, selectAvatarIcon, uploadProfilePhoto, switchAvatarTab, handlePhotoFileSelect,
   openAddPlayerModal, submitAddPlayer, switchAddPlayerTab, filterMemberSearch, selectMember, clearSelectedMember,
   addApGuestRow, removeApGuestRow,
   openBulletinForm, submitBulletinPost, deleteBulletinPost, filterBulletin,
