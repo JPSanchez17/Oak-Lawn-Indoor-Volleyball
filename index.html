@@ -653,12 +653,7 @@
   /* ADMIN MEMBERS TAB */
   .admin-tabs { display: flex; gap: 4px; margin-bottom: 20px; }
   @media (max-width: 480px) {
-    /* 4 tabs (Events/Members/Settings/Reports) don't fit on one line at
-       phone widths — "Reports" was getting clipped off the edge since the
-       page hides horizontal overflow. Wrap into a 2x2 grid instead so every
-       tab stays fully visible and tappable. */
-    .admin-tabs { flex-wrap: wrap; }
-    .admin-tabs .tab { flex: 1 1 calc(50% - 4px); padding: 10px 4px; font-size: 13px; }
+    .admin-tabs .tab { flex: 1 1 0; padding: 10px 4px; font-size: 13px; }
   }
 
   .bb-filter.active { border-color: var(--sky); color: var(--sky); }
@@ -1089,7 +1084,6 @@
       <button class="tab active" id="admTab1" onclick="switchAdminTab('events')">Events</button>
       <button class="tab" id="admTab2" onclick="switchAdminTab('members')">Members</button>
       <button class="tab" id="admTab3" onclick="switchAdminTab('settings')">Settings</button>
-      <button class="tab" id="admTab4" onclick="switchAdminTab('reports')">Reports</button>
     </div>
 
     <!-- EVENTS TAB -->
@@ -1174,6 +1168,14 @@
 
         <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--border)">
           <div>
+            <div style="font-weight:700;font-size:15px;color:var(--text)">📊 Event Reports</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:3px">Who paid, who owes, and who didn't show up, saved when you end an event from its roster. Only the 3 most recent reports are kept.</div>
+          </div>
+          <button class="btn btn-outline btn-sm" style="flex-shrink:0" onclick="openEventReportsModal()">View Reports</button>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--border)">
+          <div>
             <div style="font-weight:700;font-size:15px;color:var(--text)">🔤 Default A–Z Check-in Sort</div>
             <div style="font-size:13px;color:var(--muted);margin-top:3px">When enabled, rosters open sorted A–Z by first name instead of sign-up order. The button on the Roster page still lets you toggle it per-session.</div>
           </div>
@@ -1188,12 +1190,6 @@
       </div>
     </div>
 
-    <!-- REPORTS TAB -->
-    <div id="adminTabReports" style="display:none">
-      <div class="section-title" style="font-size:22px;margin-bottom:4px;">Event Reports</div>
-      <div class="section-sub" style="margin-bottom:12px;">Who paid, who owes, and who didn't show up, saved when you end an event from its roster. Only the 3 most recent reports are kept.</div>
-      <div id="adminReportsList"></div>
-    </div>
   </div>
 </div>
 
@@ -4202,19 +4198,21 @@ function switchAdminTab(tab) {
   document.getElementById('adminTabEvents').style.display = tab === 'events' ? '' : 'none';
   document.getElementById('adminTabMembers').style.display = tab === 'members' ? '' : 'none';
   document.getElementById('adminTabSettings').style.display = tab === 'settings' ? '' : 'none';
-  document.getElementById('adminTabReports').style.display = tab === 'reports' ? '' : 'none';
   document.getElementById('admTab1').classList.toggle('active', tab === 'events');
   document.getElementById('admTab2').classList.toggle('active', tab === 'members');
   document.getElementById('admTab3').classList.toggle('active', tab === 'settings');
-  document.getElementById('admTab4').classList.toggle('active', tab === 'reports');
   if (tab === 'members') loadAdminMembers();
   if (tab === 'settings') initAdminSettingsTab();
-  if (tab === 'reports') renderEventReportsPanel();
 }
 
 function openActivityLogModal() {
   openModal('activityLogModal');
   loadActivityLog();
+}
+
+function openEventReportsModal() {
+  openModal('eventReportsModal');
+  renderEventReportsPanel();
 }
 
 // ======================== ACTIVITY LOG ========================
@@ -5110,6 +5108,16 @@ Object.assign(window, {
       </div>
     </div>
     <div id="adminActivityList"></div>
+  </div>
+</div>
+
+<!-- ======================== EVENT REPORTS MODAL (admin) ======================== -->
+<div class="modal-overlay" id="eventReportsModal">
+  <div class="modal" style="position:relative;width:min(640px, 100%)">
+    <button class="modal-close" onclick="closeModal('eventReportsModal')">✕</button>
+    <h2>Event Reports</h2>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Who paid, who owes, and who didn't show up, saved when you end an event from its roster. Only the 3 most recent reports are kept.</div>
+    <div id="adminReportsList"></div>
   </div>
 </div>
 
