@@ -2594,7 +2594,7 @@ async function renderRoster() {
         ${paidCell}
         ${needsPayCell}
         <td style="color:var(--muted)">${num++}</td>
-        <td>${r.uid ? `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${he(r.name)}</strong>` : `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openManualPlayerProfile('${r.id}')" title="View profile">${he(r.name)}</strong>`}</td>
+        <td>${r.uid ? `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${he(r.name)}</strong>` : `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openManualPlayerProfile('${r.id}')" title="View profile">${he(r.name)}</strong>${isAdmin ? ` <button class="btn btn-outline btn-sm" style="padding:1px 7px;font-size:11px" onclick="event.stopPropagation();adminEditManualName('${r.id}','${eventId}')" title="Edit name">✏️</button>` : ''}`}</td>
         ${isAdmin ? `<td style="color:var(--muted)">${he(contact.email) || '—'}</td>` : ''}
         ${isAdmin ? `<td style="color:var(--muted)">${he(contact.phone) || '—'}</td>` : ''}
         ${isAdmin ? `<td>${payBadge}</td>` : ''}
@@ -2627,7 +2627,7 @@ async function renderRoster() {
           ${gPaidCell}
           ${gNeedsPayCell}
           <td style="color:var(--muted)">${num++}</td>
-          <td style="padding-left:24px"><span style="color:var(--muted)">↳</span> <span style="color:var(--text);font-weight:600">${he(g.name)}</span> <span style="background:rgba(91,111,212,.18);color:var(--sky);border-radius:100px;padding:2px 9px;font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;vertical-align:middle">Guest</span></td>
+          <td style="padding-left:24px"><span style="color:var(--muted)">↳</span> <span style="color:var(--text);font-weight:600">${he(g.name)}</span> <span style="background:rgba(91,111,212,.18);color:var(--sky);border-radius:100px;padding:2px 9px;font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;vertical-align:middle">Guest</span>${isAdmin ? ` <button class="btn btn-outline btn-sm" style="padding:1px 7px;font-size:11px" onclick="adminEditGuestName('${r.id}','${eventId}',${gi})" title="Edit guest name">✏️</button>` : ''}</td>
           ${isAdmin ? '<td></td>' : ''}
           ${isAdmin ? '<td></td>' : ''}
           ${isAdmin ? '<td></td>' : ''}
@@ -3279,6 +3279,52 @@ async function adminRemoveGuest(regId, eventId, guestIndex) {
   }
 }
 
+async function adminEditManualName(regId, eventId) {
+  const allRegs = regsCache[eventId] || [];
+  const reg = allRegs.find(r => r.id === regId);
+  if (!reg) return showToast('Registration not found.', true);
+  if (reg.uid) return showToast("This player has an account — edit their name from Members instead.", true);
+  const newName = prompt('Edit name:', reg.name || '');
+  if (newName === null) return; // cancelled
+  const trimmed = newName.trim();
+  if (!trimmed) return showToast('Name cannot be blank.', true);
+  if (trimmed === reg.name) return;
+  const prevName = reg.name;
+  try {
+    await setDoc(doc(db, 'registrations', regId), { name: trimmed }, { merge: true });
+    reg.name = trimmed;
+    logActivity(eventId, 'admin_edit_name', { name: trimmed, previousName: prevName, actor: 'admin' });
+    showToast('Name updated.');
+    renderRoster();
+  } catch (e) {
+    showToast('Could not update name. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+  }
+}
+
+async function adminEditGuestName(regId, eventId, guestIndex) {
+  const allRegs = regsCache[eventId] || [];
+  const reg = allRegs.find(r => r.id === regId);
+  if (!reg) return showToast('Registration not found.', true);
+  const guest = reg.guests?.[guestIndex];
+  if (!guest) return showToast('Guest not found.', true);
+  const newName = prompt('Edit guest name:', guest.name || '');
+  if (newName === null) return; // cancelled
+  const trimmed = newName.trim();
+  if (!trimmed) return showToast('Name cannot be blank.', true);
+  if (trimmed === guest.name) return;
+  const prevName = guest.name;
+  try {
+    const newGuests = reg.guests.map((g, i) => i === guestIndex ? { ...g, name: trimmed } : g);
+    await setDoc(doc(db, 'registrations', regId), { guests: newGuests }, { merge: true });
+    reg.guests = newGuests;
+    logActivity(eventId, 'admin_edit_guest_name', { name: trimmed, previousName: prevName, actor: 'admin' });
+    showToast('Guest name updated.');
+    renderRoster();
+  } catch (e) {
+    showToast('Could not update guest name. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+  }
+}
+
 async function adminTogglePayment(regId, eventId, received) {
   // 1. Patch regsCache AND the roster contact cache so any snapshot
   //    re-render (triggered by an unrelated registration change elsewhere
@@ -3590,7 +3636,7 @@ async function openManualPlayerProfile(regId) {
     const avatarEl = document.getElementById('ppAvatar');
     avatarEl.outerHTML = `<div id="ppAvatar" style="display:flex;justify-content:center;margin-bottom:12px">${avatarHtml('', 90)}</div>`;
 
-    document.getElementById('ppName').textContent = reg.name || '';
+    document.getElementById('ppName').innerHTML = `${he(reg.name || '')}${currentUser?.isAdmin ? ` <button class="btn btn-outline btn-sm" style="padding:1px 7px;font-size:11px;vertical-align:middle" onclick="closeModal('playerProfileModal');adminEditManualName('${reg.id}','${reg.eventId}')" title="Edit name">✏️</button>` : ''}`;
 
     const skillEl = document.getElementById('ppSkill');
     skillEl.innerHTML = reg.skill
@@ -5073,7 +5119,7 @@ Object.assign(window, {
   addEvent, deleteEvent, openEditEventModal, submitEditEvent, openEventSignup, confirmSignup, cancelSignup,
   openManageGroup, removeGuestFromSignup, cancelSelfFromGroup,
   addGuestRow, removeGuestRow, selectPayment,
-  renderRoster, adminRemove, adminRemoveGuest, adminTogglePayment, adminToggleNeedsPay, adminToggleGuestPayment, adminToggleGuestNeedsPay, onAdminNotesInput, showPage, openModal, closeModal,
+  renderRoster, adminRemove, adminRemoveGuest, adminEditManualName, adminEditGuestName, adminTogglePayment, adminToggleNeedsPay, adminToggleGuestPayment, adminToggleGuestNeedsPay, onAdminNotesInput, showPage, openModal, closeModal,
   adminEndEvent, adminDeleteEventReport, adminReopenEvent,
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile, openManualPlayerProfile, adjustAttendance, toggleShadowban,
   saveProfile, populateRosterSelect, showPhoneRequiredBanner, deleteMember, adminUpdateMemberSkill, adminUpdateMemberName, openIconPicker, selectAvatarIcon, uploadProfilePhoto, switchAvatarTab, handlePhotoFileSelect,
