@@ -1291,22 +1291,24 @@
 
     <!-- GUESTS: people YOU register and pay for -->
     <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-        <div>
-          <div style="font-weight:700;font-size:14px">👤 Bring a guest</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.4">For someone who won't sign up themselves. You're reserving their spot.</div>
-        </div>
-        <button class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="addGuestRow()">+ Add guest</button>
+      <div style="font-weight:700;font-size:14px">👤 Bring a guest</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.4;margin-bottom:10px">For someone who won't sign up themselves. You're reserving their spot.</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="guestNameInput" placeholder="Guest's full name" onkeydown="if(event.key==='Enter'){event.preventDefault();addGuestName();}" style="flex:1;min-width:0;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">
+        <button type="button" class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="addGuestName()">Enter</button>
       </div>
-      <div id="guestRows" style="margin-top:10px"></div>
+      <div id="guestRows" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"></div>
     </div>
 
     <!-- SQUAD: friends who register themselves -->
     <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:20px">
       <div style="font-weight:700;font-size:14px">👥 Team up with friends</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.4;margin-bottom:10px">For friends who are signing up on their own. We'll just put you on the same team, even if they sign up later.</div>
-      <input type="text" id="squadInput" placeholder="Their names, e.g. Bob Martinez, Carlos Reyes" oninput="renderSquadChips()" style="width:100%;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">
-      <div id="squadChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.4;margin-bottom:10px">For friends who are signing up on their own. We'll just you on the same team, even if they sign up later.</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="squadNameInput" placeholder="Friend's full name" onkeydown="if(event.key==='Enter'){event.preventDefault();addSquadName();}" style="flex:1;min-width:0;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">
+        <button type="button" class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="addSquadName()">Enter</button>
+      </div>
+      <div id="squadRows" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"></div>
     </div>
 
     <!-- PAYMENT METHOD -->
@@ -2181,6 +2183,7 @@ function openEventSignup(eventId) {
   document.getElementById('esm-price').textContent = `$${Number(ev.cost).toFixed(2)}`;
   document.getElementById('esm-total-line').textContent = '';
   document.getElementById('guestRows').innerHTML = '';
+  document.getElementById('guestNameInput').value = '';
   document.getElementById('payNowInstructions').classList.remove('show');
   document.getElementById('payDoorInstructions').classList.remove('show');
   document.getElementById('confirmSection').style.display = 'none';
@@ -2190,60 +2193,71 @@ function openEventSignup(eventId) {
   document.getElementById('payOptDoor').classList.remove('selected');
   document.getElementById('checkAge').checked = false;
   document.getElementById('checkWaiver').checked = false;
-  document.getElementById('squadInput').value = '';
-  document.getElementById('squadChips').innerHTML = '';
+  document.getElementById('squadRows').innerHTML = '';
+  document.getElementById('squadNameInput').value = '';
 
   openModal('eventSignupModal');
 }
 
-function renderSquadChips() {
-  const input = document.getElementById('squadInput');
-  const chipsEl = document.getElementById('squadChips');
-  if (!input || !chipsEl) return;
-  const names = input.value.split(',').map(s => s.trim()).filter(Boolean);
-  chipsEl.innerHTML = names.map(n =>
-    `<span style="background:rgba(91,111,212,.15);color:var(--sky);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600">${he(n)}</span>`
-  ).join('');
+function addSquadName() {
+  const input = document.getElementById('squadNameInput');
+  const name = (input.value || '').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!name) return;
+  const exists = Array.from(document.querySelectorAll('#squadRows [data-squad-name]'))
+    .some(el => el.dataset.squadName.toLowerCase() === name.toLowerCase());
+  if (!exists) {
+    const chip = document.createElement('span');
+    chip.dataset.squadName = name;
+    chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:rgba(91,111,212,.15);color:var(--sky);border-radius:999px;padding:5px 6px 5px 12px;font-size:13px;font-weight:600';
+    const label = document.createElement('span');
+    label.textContent = name;
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.textContent = '✕';
+    x.style.cssText = 'background:none;border:none;color:inherit;cursor:pointer;font-size:13px;padding:0 4px;line-height:1';
+    x.onclick = () => chip.remove();
+    chip.append(label, x);
+    document.getElementById('squadRows').appendChild(chip);
+  }
+  input.value = '';
+  input.focus();
 }
 
-function addGuestRow() {
+function addGuestName() {
+  const input = document.getElementById('guestNameInput');
+  const name = (input.value || '').replace(/\s+/g, ' ').trim();
+  if (!name) return;
   const ev = eventsCache.find(e => e.id === selectedEventId);
   const taken = (regsCache[selectedEventId] || []).filter(r => !r.waitlisted).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
   const available = ev ? ev.spots - taken : 0;
   if (available <= 0) return showToast('This event is full — waitlist is for one person only.', true);
-  if (guestCount >= available - 1) return showToast('Not enough spots for more guests.', true);
+  const current = document.querySelectorAll('#guestRows [data-guest-name]').length;
+  if (current >= available - 1) return showToast('Not enough spots for more guests.', true);
 
-  guestCount++;
-  guestIdSeq++;
-  const idx = guestIdSeq;
-  const row = document.createElement('div');
-  row.className = 'guest-row';
-  row.id = `guestRow${idx}`;
-  row.innerHTML = `
-    <button class="remove-guest" onclick="removeGuestRow(${idx})">✕</button>
-    <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase">Guest ${idx}</div>
-    <div class="form-group" style="margin-bottom:0">
-      <label>Guest Name</label>
-      <input type="text" id="guestName${idx}" placeholder="Full name">
-    </div>`;
-  document.getElementById('guestRows').appendChild(row);
-  updatePriceTotal();
-}
-
-function removeGuestRow(idx) {
-  const row = document.getElementById(`guestRow${idx}`);
-  if (row) row.remove();
-  guestCount = document.querySelectorAll('#guestRows .guest-row').length;
+  const chip = document.createElement('span');
+  chip.dataset.guestName = name;
+  chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:rgba(240,180,41,.15);color:var(--gold);border-radius:999px;padding:5px 6px 5px 12px;font-size:13px;font-weight:600';
+  const label = document.createElement('span');
+  label.textContent = name;
+  const x = document.createElement('button');
+  x.type = 'button';
+  x.textContent = '✕';
+  x.style.cssText = 'background:none;border:none;color:inherit;cursor:pointer;font-size:13px;padding:0 4px;line-height:1';
+  x.onclick = () => { chip.remove(); updatePriceTotal(); };
+  chip.append(label, x);
+  document.getElementById('guestRows').appendChild(chip);
+  input.value = '';
+  input.focus();
   updatePriceTotal();
 }
 
 function updatePriceTotal() {
   const ev = eventsCache.find(e => e.id === selectedEventId);
   if (!ev) return;
-  const guestRows = document.querySelectorAll('#guestRows .guest-row');
-  const total = (1 + guestRows.length) * ev.cost;
+  const guestCountNow = document.querySelectorAll('#guestRows [data-guest-name]').length;
+  const total = (1 + guestCountNow) * ev.cost;
   const line = document.getElementById('esm-total-line');
-  line.textContent = guestRows.length > 0 ? `Total: $${total.toFixed(2)} for you + ${guestRows.length} guest${guestRows.length > 1 ? 's' : ''}` : '';
+  line.textContent = guestCountNow > 0 ? `Total: $${total.toFixed(2)} for you + ${guestCountNow} guest${guestCountNow > 1 ? 's' : ''}` : '';
 }
 
 function selectPayment(type) {
@@ -2273,18 +2287,14 @@ async function confirmSignup() {
   if (existing.find(r => r.uid === currentUser.uid)) { showToast("You're already signed up!", true); closeModal('eventSignupModal'); return; }
 
   // Collect guests
-  const guestRows = document.querySelectorAll('#guestRows .guest-row');
-  const guests = [];
-  for (const row of guestRows) {
-    const idx = row.id.replace('guestRow', '');
-    const name = document.getElementById(`guestName${idx}`)?.value.trim();
-    if (!name) return showToast('Please enter a name for all guests.', true);
-    guests.push({ name });
-  }
+  const guests = Array.from(document.querySelectorAll('#guestRows [data-guest-name]')).map(el => ({ name: el.dataset.guestName }));
+  const pendingGuest = (document.getElementById('guestNameInput')?.value || '').replace(/\s+/g, ' ').trim();
+  if (pendingGuest) guests.push({ name: pendingGuest });
 
   // Collect squad names (people signing up separately they plan to play with)
-  const squadNames = (document.getElementById('squadInput')?.value || '')
-    .split(',').map(s => s.trim()).filter(Boolean);
+  const squadNames = Array.from(document.querySelectorAll('#squadRows [data-squad-name]')).map(el => el.dataset.squadName);
+  const pendingSquad = (document.getElementById('squadNameInput')?.value || '').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  if (pendingSquad && !squadNames.some(n => n.toLowerCase() === pendingSquad.toLowerCase())) squadNames.push(pendingSquad);
 
   const mainExisting = existing.filter(r => !r.waitlisted);
   const taken = mainExisting.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
@@ -5124,7 +5134,7 @@ Object.assign(window, {
   login, login2, register, register2, googleSignIn, logout,
   addEvent, deleteEvent, openEditEventModal, submitEditEvent, openEventSignup, confirmSignup, cancelSignup,
   openManageGroup, removeGuestFromSignup, cancelSelfFromGroup,
-  addGuestRow, removeGuestRow, selectPayment,
+  addGuestName, selectPayment,
   renderRoster, adminRemove, adminRemoveGuest, adminEditManualName, adminEditGuestName, adminTogglePayment, adminToggleNeedsPay, adminToggleGuestPayment, adminToggleGuestNeedsPay, onAdminNotesInput, showPage, openModal, closeModal,
   adminEndEvent, adminDeleteEventReport, adminReopenEvent,
   switchAuthTab, switchAuthTab2, switchAdminTab, switchRulesTab, openPlayerProfile, openManualPlayerProfile, adjustAttendance, toggleShadowban,
@@ -5137,7 +5147,7 @@ Object.assign(window, {
   sendFriendRequest, cancelFriendRequest, declineFriendRequest, acceptFriendRequest,
   removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage, deleteChat,
   toggleAdminAlphaSort,
-  renderSquadChips, toggleSquadsPanel, resolveSquadMatch, shuffleTeams,
+  addSquadName, toggleSquadsPanel, resolveSquadMatch, shuffleTeams,
   openManualGroupBuilder, cancelManualGroupBuilder, createManualGroup, removeManualGroup,
   removeRegFromTeam, removeGuestFromTeam, restoreNoShowReg, restoreNoShowGuest,
   loadActivityLog, renderActivityLog, openActivityLogModal, openEventReportsModal, goToSkillLevelSetting, requestPasswordReset
