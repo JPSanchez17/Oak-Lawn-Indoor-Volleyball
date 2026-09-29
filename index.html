@@ -1286,20 +1286,26 @@
       <div style="color:var(--muted);font-size:13px;margin-top:4px" id="esm-total-line"></div>
     </div>
 
-    <!-- GUESTS -->
-    <div style="margin-bottom:20px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div style="font-weight:700;font-size:15px">Bringing guests?</div>
-        <button class="btn btn-outline btn-sm" onclick="addGuestRow()">+ Add Guest</button>
+    <!-- WHO ELSE IS COMING -->
+    <div style="font-weight:700;font-size:15px;margin-bottom:10px">Playing with anyone else? <span style="font-weight:400;color:var(--muted);font-size:13px">(optional)</span></div>
+
+    <!-- GUESTS: people YOU register and pay for -->
+    <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div>
+          <div style="font-weight:700;font-size:14px">👤 Bring a guest</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.4">For someone who won't sign up themselves. You're reserving and paying for their spot.</div>
+        </div>
+        <button class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="addGuestRow()">+ Add guest</button>
       </div>
-      <div id="guestRows"></div>
+      <div id="guestRows" style="margin-top:10px"></div>
     </div>
 
-    <!-- SQUAD / PLAYING WITH -->
-    <div style="margin-bottom:20px">
-      <div style="font-weight:700;font-size:15px;margin-bottom:6px">Playing with anyone signing up separately?</div>
-      <input type="text" id="squadInput" placeholder="e.g. Bob Martinez, Carlos Reyes" oninput="renderSquadChips()" style="width:100%;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">
-      <div style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4">We'll try to group you on the same team once they sign up too — even if that's later.</div>
+    <!-- SQUAD: friends who register themselves -->
+    <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:20px">
+      <div style="font-weight:700;font-size:14px">👥 Team up with friends</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.4;margin-bottom:10px">For friends who are signing up on their own. They pay for themselves &mdash; we'll just put you on the same team, even if they sign up later.</div>
+      <input type="text" id="squadInput" placeholder="Their names, e.g. Bob Martinez, Carlos Reyes" oninput="renderSquadChips()" style="width:100%;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">
       <div id="squadChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
     </div>
 
