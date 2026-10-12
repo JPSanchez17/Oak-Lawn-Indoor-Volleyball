@@ -2056,16 +2056,20 @@ function renderSchedule() {
           actionBtn = `<span style="color:var(--muted);font-weight:600;font-size:13px">Event Ended</span>`;
         }
       } else if (myMainSignup) {
-        const guestLabel = myMainSignup.guests?.length ? ` +${myMainSignup.guests.length} guest${myMainSignup.guests.length > 1 ? 's' : ''}` : '';
-        const hasGuests = myMainSignup.guests?.length > 0;
+        const pendingN = myMainSignup.waitlistedGuests?.length || 0;
+        const guestLabel = (myMainSignup.guests?.length ? ` +${myMainSignup.guests.length} guest${myMainSignup.guests.length > 1 ? 's' : ''}` : '')
+                         + (pendingN ? ` (+${pendingN} waitlisted)` : '');
+        const hasGuests = (myMainSignup.guests?.length || 0) > 0 || pendingN > 0;
         actionBtn = `<span style="color:var(--success);font-weight:700;font-size:14px">✅ Signed Up${guestLabel}</span>
                      ${hasGuests
                        ? `<button class="btn btn-outline btn-sm" onclick="openManageGroup('${ev.id}')">Manage Group</button>`
-                       : `<button class="btn btn-outline btn-sm" onclick="cancelSignup('${ev.id}')">Cancel</button>`
-                     }`;
+                       : `<button class="btn btn-outline btn-sm" onclick="cancelSignup('${ev.id}')">Cancel</button>`}`;
       } else if (myWaitlist) {
-        actionBtn = `<span class="waitlist-badge">⏳ Waitlist #${waitPos}</span>
-                     <button class="btn btn-outline btn-sm" style="margin-top:4px" onclick="cancelSignup('${ev.id}')">Leave Waitlist</button>`;
+        const pendingN = myWaitlist.waitlistedGuests?.length || 0;
+        actionBtn = `<span class="waitlist-badge">⏳ Waitlist #${waitPos}${pendingN ? ` +${pendingN} guest${pendingN > 1 ? 's' : ''}` : ''}</span>
+                     ${pendingN
+                       ? `<button class="btn btn-outline btn-sm" style="margin-top:4px" onclick="openManageGroup('${ev.id}')">Manage Group</button>`
+                       : `<button class="btn btn-outline btn-sm" style="margin-top:4px" onclick="cancelSignup('${ev.id}')">Leave Waitlist</button>`}`;
       } else if (intermediateGated) {
         actionBtn = `<button class="btn btn-outline btn-sm" onclick="goToSkillLevelSetting()" title="Update your skill level on your profile">🔒 B Level and above</button>`;
       } else if (full) {
@@ -2227,12 +2231,8 @@ function addGuestName() {
   const input = document.getElementById('guestNameInput');
   const name = (input.value || '').replace(/\s+/g, ' ').trim();
   if (!name) return;
-  const ev = eventsCache.find(e => e.id === selectedEventId);
-  const taken = (regsCache[selectedEventId] || []).filter(r => !r.waitlisted).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
-  const available = ev ? ev.spots - taken : 0;
-  if (available <= 0) return showToast('This event is full — waitlist is for one person only.', true);
   const current = document.querySelectorAll('#guestRows [data-guest-name]').length;
-  if (current >= available - 1) return showToast('Not enough spots for more guests.', true);
+  if (current >= 10) return showToast('Max 10 guests per sign-up.', true);
 
   const chip = document.createElement('span');
   chip.dataset.guestName = name;
@@ -2256,8 +2256,17 @@ function updatePriceTotal() {
   if (!ev) return;
   const guestCountNow = document.querySelectorAll('#guestRows [data-guest-name]').length;
   const total = (1 + guestCountNow) * ev.cost;
-  const line = document.getElementById('esm-total-line');
-  line.textContent = guestCountNow > 0 ? `Total: $${total.toFixed(2)} for you + ${guestCountNow} guest${guestCountNow > 1 ? 's' : ''}` : '';
+  const taken = (regsCache[selectedEventId] || []).filter(r => !r.waitlisted)
+    .reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+  const available = Math.max(0, ev.spots - taken);
+  let text = guestCountNow > 0
+    ? `Total: $${total.toFixed(2)} for you + ${guestCountNow} guest${guestCountNow > 1 ? 's' : ''}`
+    : '';
+  if (guestCountNow > 0 && 1 + guestCountNow > available) {
+    const waitGuests = guestCountNow - Math.max(0, available - 1);
+    text += ` · ${waitGuests} guest${waitGuests > 1 ? 's' : ''} will be waitlisted until spots open`;
+  }
+  document.getElementById('esm-total-line').textContent = text;
 }
 
 function selectPayment(type) {
@@ -2286,52 +2295,24 @@ async function confirmSignup() {
   const existing = regsCache[selectedEventId] || [];
   if (existing.find(r => r.uid === currentUser.uid)) { showToast("You're already signed up!", true); closeModal('eventSignupModal'); return; }
 
-  // Collect guests
   const guests = Array.from(document.querySelectorAll('#guestRows [data-guest-name]')).map(el => ({ name: el.dataset.guestName }));
-
-  // Collect squad names (people signing up separately they plan to play with)
   const squadNames = Array.from(document.querySelectorAll('#squadRows [data-squad-name]')).map(el => el.dataset.squadName);
 
-  const mainExisting = existing.filter(r => !r.waitlisted);
-  const taken = mainExisting.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
-  const isFull = taken >= ev.spots;
+  const taken = existing.filter(r => !r.waitlisted).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+  const available = Math.max(0, ev.spots - taken);
+  const isFull = available <= 0;
 
-  // If full, add to waitlist (guests not supported on waitlist)
-  if (isFull) {
-    if (guests.length > 0) { showToast('Waitlist sign-ups are for one person only — no guests.', true); return; }
-    if (currentUser.shadowbanned) {
-      closeModal('eventSignupModal');
-      showToast(`Added to the waitlist! We'll move you up if a spot opens. 🏐`);
-      return;
-    }
-    const regRef = await addDoc(collection(db, 'registrations'), {
-      eventId: selectedEventId,
-      uid: currentUser.uid,
-      name: `${currentUser.firstName} ${currentUser.lastName}`,
-      guests: [],
-      squadNames,
-      waitlisted: true,
-      signedUpAt: serverTimestamp()
-    });
-    await setDoc(doc(db, 'registrations', regRef.id, 'private', 'contact'), {
-      email: currentUser.email,
-      phone: currentUser.phone || '',
-      paymentMethod: selectedPayment
-    });
-    closeModal('eventSignupModal');
-    logActivity(selectedEventId, 'waitlist_join', { name: `${currentUser.firstName} ${currentUser.lastName}`, uid: currentUser.uid, actor: 'self' });
-    showToast(`Added to the waitlist! We'll move you up if a spot opens. 🏐`);
-    return;
-  }
+  // Registrant takes a spot first, then guests in order until spots run out.
+  // Anyone who doesn't fit is saved as a pending (waitlisted) guest.
+  const fitGuests = isFull ? [] : guests.slice(0, Math.max(0, available - 1));
+  const pendingGuests = guests.slice(fitGuests.length);
+  const pendingNote = pendingGuests.length
+    ? ` ${pendingGuests.length} guest${pendingGuests.length > 1 ? 's are' : ' is'} waitlisted until spots open.`
+    : '';
 
-  if (taken + 1 + guests.length > ev.spots) { showToast('Sorry, not enough spots available.', true); return; }
-
-  // Shadowbanned users see a normal-looking success, but nothing is ever written —
-  // no registration doc, no roster entry, and (since the email is sent by a Cloud
-  // Function triggered off registration creation) no email notification either.
   if (currentUser.shadowbanned) {
     closeModal('eventSignupModal');
-    showToast(`You're on the roster! See you there 🏐`);
+    showToast(isFull ? `Added to the waitlist! We'll move you up if a spot opens. 🏐` : `You're on the roster! See you there 🏐`);
     return;
   }
 
@@ -2339,9 +2320,10 @@ async function confirmSignup() {
     eventId: selectedEventId,
     uid: currentUser.uid,
     name: `${currentUser.firstName} ${currentUser.lastName}`,
-    guests,
+    guests: fitGuests,
+    waitlistedGuests: pendingGuests,
     squadNames,
-    waitlisted: false,
+    waitlisted: isFull,
     signedUpAt: serverTimestamp()
   });
   await setDoc(doc(db, 'registrations', regRef.id, 'private', 'contact'), {
@@ -2351,8 +2333,13 @@ async function confirmSignup() {
   });
 
   closeModal('eventSignupModal');
-  logActivity(selectedEventId, 'signup', { name: `${currentUser.firstName} ${currentUser.lastName}`, uid: currentUser.uid, actor: 'self', guests: guests.map(g => g.name) });
-  showToast(`You're on the roster! See you there 🏐`);
+  logActivity(selectedEventId, isFull ? 'waitlist_join' : 'signup', {
+    name: `${currentUser.firstName} ${currentUser.lastName}`, uid: currentUser.uid,
+    actor: 'self', guests: fitGuests.map(g => g.name)
+  });
+  showToast(isFull
+    ? `Added to the waitlist! We'll move you up if a spot opens. 🏐${pendingNote}`
+    : `You're on the roster! See you there 🏐${pendingNote}`);
 }
 
 
@@ -2360,22 +2347,20 @@ async function confirmSignup() {
 function openManageGroup(eventId) {
   if (!currentUser) return;
   const allRegs = regsCache[eventId] || [];
-  const mine = allRegs.find(r => r.uid === currentUser.uid && !r.waitlisted);
+  const mine = allRegs.find(r => r.uid === currentUser.uid);
   if (!mine) return;
 
   currentManageGroupEventId = eventId;
   const ev = eventsCache.find(e => e.id === eventId);
-  const modal = document.getElementById('manageGroupModal');
   document.getElementById('mgm-title').textContent = ev ? ev.name : 'Your Group';
 
-  const listEl = document.getElementById('mgm-list');
   let html = `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:rgba(34,197,94,.07);border-radius:8px;margin-bottom:8px">
       <div>
         <div style="font-weight:700;color:var(--text)">${he(mine.name)} <span style="font-size:12px;color:var(--success);font-weight:700">YOU</span></div>
-        <div style="font-size:13px;color:var(--muted)">Primary registrant</div>
+        <div style="font-size:13px;color:var(--muted)">${mine.waitlisted ? '⏳ On the waitlist' : 'Primary registrant'}</div>
       </div>
-      <button class="btn btn-danger btn-sm" onclick="cancelSelfFromGroup('${eventId}')">Cancel My Spot</button>
+      <button class="btn btn-danger btn-sm" onclick="cancelSelfFromGroup('${eventId}')">${mine.waitlisted ? 'Leave Waitlist' : 'Cancel My Spot'}</button>
     </div>`;
 
   (mine.guests || []).forEach((g, i) => {
@@ -2389,7 +2374,18 @@ function openManageGroup(eventId) {
     </div>`;
   });
 
-  listEl.innerHTML = html;
+  (mine.waitlistedGuests || []).forEach((g, i) => {
+    html += `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:rgba(255,193,7,.05);border:1px solid rgba(255,193,7,.3);border-radius:8px;margin-bottom:8px">
+      <div>
+        <div style="font-weight:600;color:var(--text)">${he(g.name)}</div>
+        <div style="font-size:13px;color:var(--gold)">⏳ Waitlisted guest — added when a spot opens</div>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="removePendingGuestFromSignup('${mine.id}', '${eventId}', ${i})">Remove</button>
+    </div>`;
+  });
+
+  document.getElementById('mgm-list').innerHTML = html;
   openModal('manageGroupModal');
 }
 
@@ -2419,53 +2415,83 @@ async function removeGuestFromSignup(regId, eventId, guestIndex) {
   }
 }
 
+async function removePendingGuestFromSignup(regId, eventId, idx) {
+  if (!confirm('Remove this waitlisted guest?')) return;
+  const reg = (regsCache[eventId] || []).find(r => r.id === regId);
+  if (!reg) return;
+  const name = reg.waitlistedGuests?.[idx]?.name || 'Unknown';
+  try {
+    const next = (reg.waitlistedGuests || []).filter((_, i) => i !== idx);
+    await setDoc(doc(db, 'registrations', regId), { waitlistedGuests: next }, { merge: true });
+    logActivity(eventId, 'guest_remove', { name: reg.name, uid: reg.uid, actor: 'self', guests: [name] });
+    showToast('Guest removed.');
+    openManageGroup(eventId);
+  } catch (e) {
+    showToast('Could not remove guest. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+  }
+}
+
 async function cancelSelfFromGroup(eventId) {
   if (!currentUser) return;
-  const allRegs = regsCache[eventId] || [];
-  const mine = allRegs.find(r => r.uid === currentUser.uid && !r.waitlisted);
+  const mine = (regsCache[eventId] || []).find(r => r.uid === currentUser.uid);
   if (!mine) return;
 
-  const guestNames = (mine.guests || []).map(g => g.name).join(', ');
-  const msg = mine.guests?.length
-    ? `Cancel your spot? This will also remove your guests (${guestNames}). The waitlist will be moved up.`
-    : 'Cancel your spot? The next person on the waitlist will be moved up.';
+  const wasMain = !mine.waitlisted;
+  const allGuestNames = [...(mine.guests || []), ...(mine.waitlistedGuests || [])].map(g => g.name);
+  let msg = wasMain ? 'Cancel your spot?' : 'Leave the waitlist?';
+  if (allGuestNames.length) msg += ` This will also remove your guests (${allGuestNames.join(', ')}).`;
+  if (wasMain) msg += ' The waitlist will be moved up.';
   if (!confirm(msg)) return;
 
   try {
     closeModal('manageGroupModal');
     await deleteDoc(doc(db, 'registrations', mine.id, 'private', 'contact')).catch(() => {});
     await deleteDoc(doc(db, 'registrations', mine.id));
-    logActivity(eventId, 'cancel', { name: mine.name, uid: mine.uid, actor: 'self', guests: (mine.guests || []).map(g => g.name) });
-    const spotsFreed = 1 + (mine.guests?.length || 0);
-    await promoteFromWaitlist(eventId, spotsFreed);
-    showToast('Your spot has been cancelled.');
+    logActivity(eventId, wasMain ? 'cancel' : 'waitlist_leave', { name: mine.name, uid: mine.uid, actor: 'self', guests: allGuestNames });
+    if (wasMain) await promoteFromWaitlist(eventId);
+    showToast(wasMain ? 'Your spot has been cancelled.' : 'You have been removed from the waitlist.');
   } catch (e) {
     console.error('cancelSelfFromGroup error:', e);
-    showToast('Could not cancel your spot. ' + (e.code === 'permission-denied' ? 'Permission denied — check Firestore rules.' : 'Try again.'), true);
+    showToast('Could not cancel. ' + (e.code === 'permission-denied' ? 'Permission denied — check Firestore rules.' : 'Try again.'), true);
   }
 }
 
-async function promoteFromWaitlist(eventId, spotsCount = 1) {
-  // Re-fetch the live waitlist from Firestore instead of trusting the local
-  // regsCache, which is updated asynchronously via onSnapshot and can be
-  // stale by the time this runs (e.g. right after someone else's doc was
-  // just deleted).
-  const snap = await getDocs(query(collection(db, 'registrations'), where('eventId', '==', eventId), where('waitlisted', '==', true)));
-  const waitlist = snap.docs
-    .map(d => ({ id: d.id, ...d.data() }))
+async function promoteFromWaitlist(eventId) {
+  const ev = eventsCache.find(e => e.id === eventId);
+  if (!ev) return;
+
+  const snap = await getDocs(query(collection(db, 'registrations'), where('eventId', '==', eventId)));
+  const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  const taken = all.filter(r => !r.waitlisted).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
+  let available = ev.spots - taken;
+  if (available <= 0) return;
+
+  const queue = all
+    .filter(r => r.waitlisted || (r.waitlistedGuests?.length > 0))
     .sort((a, b) => ((a.signedUpAt?.seconds) || 0) - ((b.signedUpAt?.seconds) || 0));
 
-  let promoted = 0;
-  for (const w of waitlist) {
-    if (promoted >= spotsCount) break;
+  for (const w of queue) {
+    if (available <= 0) break;
+    const needsSelf = !!w.waitlisted;
+    const pending = w.waitlistedGuests || [];
+
+    if (needsSelf) available -= 1;
+    const fit = pending.slice(0, Math.max(0, available));
+    const leftover = pending.slice(fit.length);
+    available -= fit.length;
+
+    if (!needsSelf && fit.length === 0) continue;
+
     try {
-      // updateDoc throws if the document no longer exists, instead of
-      // silently recreating a near-empty doc the way setDoc(...,{merge:true})
-      // would. That recreation is what was reviving canceled waitlist
-      // entries onto the main list.
-      await updateDoc(doc(db, 'registrations', w.id), { waitlisted: false });
-      promoted++;
-      logActivity(eventId, 'promoted', { name: w.name, uid: w.uid, actor: 'system' });
+      await updateDoc(doc(db, 'registrations', w.id), {
+        waitlisted: false,
+        guests: [...(w.guests || []), ...fit],
+        waitlistedGuests: leftover
+      });
+      logActivity(eventId, needsSelf ? 'promoted' : 'guests_promoted', {
+        name: w.name, uid: w.uid, actor: 'system', guests: fit.map(g => g.name)
+      });
     } catch (e) {
       console.warn('Skipping stale waitlist entry (likely already canceled):', w.id, e);
     }
@@ -2645,6 +2671,17 @@ async function renderRoster() {
           ${isAdmin ? '<td></td>' : ''}
           <td></td>
           ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemoveGuest('${r.id}', '${eventId}', ${gi})">Remove</button></td>` : ''}
+        </tr>`;
+      }
+      for (let wgi = 0; wgi < (r.waitlistedGuests || []).length; wgi++) {
+        const wg = r.waitlistedGuests[wgi];
+        rows += `<tr style="background:rgba(255,193,7,.05);border-left:3px solid var(--gold)">
+          ${isAdmin ? '<td></td><td></td>' : ''}
+          <td style="color:var(--muted)">—</td>
+          <td style="padding-left:24px"><span style="color:var(--muted)">↳</span> <span style="color:var(--text);font-weight:600">${he(wg.name)}</span> <span class="waitlist-badge" style="font-size:11px;padding:2px 9px">Waitlisted Guest</span></td>
+          ${isAdmin ? '<td></td><td></td><td></td>' : ''}
+          <td></td>
+          ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemoveWaitlistedGuest('${r.id}', '${eventId}', ${wgi})">Remove</button></td>` : ''}
         </tr>`;
       }
     }
@@ -3286,6 +3323,21 @@ async function adminRemoveGuest(regId, eventId, guestIndex) {
     if (!reg.waitlisted) await promoteFromWaitlist(eventId, 1);
     logActivity(eventId, 'admin_remove_guest', { name: reg.name, uid: reg.uid, actor: 'admin', guests: [guestName] });
     showToast(`${guestName} removed.`);
+  } catch (e) {
+    showToast('Could not remove guest. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+  }
+}
+
+async function adminRemoveWaitlistedGuest(regId, eventId, idx) {
+  const reg = (regsCache[eventId] || []).find(r => r.id === regId);
+  if (!reg) return;
+  const name = reg.waitlistedGuests?.[idx]?.name || 'this guest';
+  if (!confirm(`Remove ${name} from the waitlist?`)) return;
+  try {
+    const next = (reg.waitlistedGuests || []).filter((_, i) => i !== idx);
+    await setDoc(doc(db, 'registrations', regId), { waitlistedGuests: next }, { merge: true });
+    logActivity(eventId, 'admin_remove_guest', { name: reg.name, uid: reg.uid, actor: 'admin', guests: [name] });
+    showToast(`${name} removed.`);
   } catch (e) {
     showToast('Could not remove guest. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
   }
@@ -4286,7 +4338,8 @@ const ACTIVITY_TYPE_META = {
   admin_remove:         { icon: '🗑️', label: 'Removed by admin' },
   admin_remove_waitlist:{ icon: '🗑️', label: 'Removed from waitlist by admin' },
   guest_remove:         { icon: '🚪', label: 'Removed a guest' },
-  admin_remove_guest:   { icon: '🗑️', label: 'Removed a guest by admin' }
+  admin_remove_guest:   { icon: '🗑️', label: 'Removed a guest by admin' },
+  guests_promoted:      { icon: '⬆️', label: 'Guests promoted from waitlist' }
 };
 
 function loadActivityLog() {
@@ -4653,8 +4706,8 @@ async function submitAddPlayer() {
         if (!name) return showToast('Please enter a name for all guests.', true);
         guests.push({ name });
       }
-      if (waitlisted && guests.length > 0) return showToast('This event is full — guests aren\'t supported when adding to the waitlist.', true);
-      if (!waitlisted && taken + 1 + guests.length > ev.spots) return showToast('Not enough spots for that many guests.', true);
+      const fitCount = waitlisted ? 0 : Math.max(0, Math.min(guests.length, ev.spots - taken - 1));
+      const pendingGuests = guests.splice(fitCount);
       const regRef = await addDoc(collection(db, 'registrations'), {
         eventId,
         uid: m.id,
@@ -4662,6 +4715,7 @@ async function submitAddPlayer() {
         guests,
         squadNames,
         waitlisted,
+        waitlistedGuests: pendingGuests,
         manual: true,
         addedBy: currentUser.uid,
         signedUpAt: serverTimestamp()
@@ -4695,8 +4749,8 @@ async function submitAddPlayer() {
         if (!name) return showToast('Please enter a name for all guests.', true);
         guests.push({ name });
       }
-      if (waitlisted && guests.length > 0) return showToast('This event is full — guests aren\'t supported when adding to the waitlist.', true);
-      if (!waitlisted && taken + 1 + guests.length > ev.spots) return showToast('Not enough spots for that many guests.', true);
+      const fitCount = waitlisted ? 0 : Math.max(0, Math.min(guests.length, ev.spots - taken - 1));
+      const pendingGuests = guests.splice(fitCount);
       const regRef = await addDoc(collection(db, 'registrations'), {
         eventId,
         uid: null,
@@ -4705,6 +4759,7 @@ async function submitAddPlayer() {
         guests,
         squadNames,
         waitlisted,
+        waitlistedGuests: pendingGuests,
         manual: true,
         addedBy: currentUser.uid,
         signedUpAt: serverTimestamp()
@@ -5146,7 +5201,8 @@ Object.assign(window, {
   addSquadName, toggleSquadsPanel, resolveSquadMatch, shuffleTeams,
   openManualGroupBuilder, cancelManualGroupBuilder, createManualGroup, removeManualGroup,
   removeRegFromTeam, removeGuestFromTeam, restoreNoShowReg, restoreNoShowGuest,
-  loadActivityLog, renderActivityLog, openActivityLogModal, openEventReportsModal, goToSkillLevelSetting, requestPasswordReset
+  loadActivityLog, renderActivityLog, openActivityLogModal, openEventReportsModal, goToSkillLevelSetting, requestPasswordReset,
+  adminRemoveWaitlistedGuest, removePendingGuestFromSignup
 });
 </script>
 
