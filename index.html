@@ -2036,8 +2036,9 @@ function renderSchedule() {
       const full = taken >= ev.spots;
       const myMainSignup = currentUser && mainRegs.find(r => r.uid === currentUser.uid);
       const myWaitlist = currentUser && waitRegs.find(r => r.uid === currentUser.uid);
-      const waitPos = myWaitlist ? waitRegs.indexOf(myWaitlist) + 1 : 0;
-      const waitCount = waitRegs.length;
+      const waitQueueEv = buildWaitQueue(evRegs);
+      const waitPos = myWaitlist ? waitQueueEv.findIndex(en => en.type === 'lead' && en.reg.id === myWaitlist.id) + 1 : 0;
+      const waitCount = waitQueueEv.length;
 
       let actionBtn = '';
       const intermediateGated = !!currentUser && isIntermediateEvent(ev) && !meetsIntermediateLevel(currentUser);
@@ -2456,6 +2457,22 @@ async function cancelSelfFromGroup(eventId) {
   }
 }
 
+// Builds the ordered waitlist queue as separate entries: each waitlisted
+// registrant is one entry, and each pending guest is its own entry placed
+// right after their party lead (ordered by when the lead signed up).
+function buildWaitQueue(regs) {
+  const sorted = regs
+    .filter(r => r.waitlisted || (r.waitlistedGuests?.length > 0))
+    .slice()
+    .sort((a, b) => ((a.signedUpAt?.seconds) || 0) - ((b.signedUpAt?.seconds) || 0));
+  const queue = [];
+  for (const r of sorted) {
+    if (r.waitlisted) queue.push({ type: 'lead', reg: r });
+    (r.waitlistedGuests || []).forEach((g, idx) => queue.push({ type: 'guest', reg: r, guest: g, idx }));
+  }
+  return queue;
+}
+
 async function promoteFromWaitlist(eventId) {
   const ev = eventsCache.find(e => e.id === eventId);
   if (!ev) return;
@@ -2467,33 +2484,41 @@ async function promoteFromWaitlist(eventId) {
   let available = ev.spots - taken;
   if (available <= 0) return;
 
-  const queue = all
-    .filter(r => r.waitlisted || (r.waitlistedGuests?.length > 0))
-    .sort((a, b) => ((a.signedUpAt?.seconds) || 0) - ((b.signedUpAt?.seconds) || 0));
-
-  for (const w of queue) {
+  // Walk the queue one person at a time. A promoted lead does NOT pull their
+  // guests along; each guest waits for their own turn, then is recombined
+  // into the lead's confirmed guest list when they get a spot.
+  const changes = {};
+  for (const entry of buildWaitQueue(all)) {
     if (available <= 0) break;
-    const needsSelf = !!w.waitlisted;
-    const pending = w.waitlistedGuests || [];
+    const r = entry.reg;
+    const c = changes[r.id] || (changes[r.id] = {
+      reg: r, waitlisted: !!r.waitlisted,
+      guests: [...(r.guests || [])], pending: [...(r.waitlistedGuests || [])],
+      promotedLead: false, promotedGuests: []
+    });
+    if (entry.type === 'lead') {
+      c.waitlisted = false; c.promotedLead = true; available -= 1;
+    } else {
+      if (c.waitlisted) continue; // lead still waiting: guest can't be seated without them
+      c.guests.push(entry.guest);
+      c.pending = c.pending.filter(g => g !== entry.guest);
+      c.promotedGuests.push(entry.guest.name); available -= 1;
+    }
+  }
 
-    if (needsSelf) available -= 1;
-    const fit = pending.slice(0, Math.max(0, available));
-    const leftover = pending.slice(fit.length);
-    available -= fit.length;
-
-    if (!needsSelf && fit.length === 0) continue;
-
+  for (const c of Object.values(changes)) {
+    if (!c.promotedLead && c.promotedGuests.length === 0) continue;
+    const r = c.reg;
     try {
-      await updateDoc(doc(db, 'registrations', w.id), {
-        waitlisted: false,
-        guests: [...(w.guests || []), ...fit],
-        waitlistedGuests: leftover
+      await updateDoc(doc(db, 'registrations', r.id), {
+        waitlisted: c.waitlisted,
+        guests: c.guests,
+        waitlistedGuests: c.pending
       });
-      logActivity(eventId, needsSelf ? 'promoted' : 'guests_promoted', {
-        name: w.name, uid: w.uid, actor: 'system', guests: fit.map(g => g.name)
-      });
+      if (c.promotedLead) logActivity(eventId, 'promoted', { name: r.name, uid: r.uid, actor: 'system' });
+      if (c.promotedGuests.length) logActivity(eventId, 'guests_promoted', { name: r.name, uid: r.uid, actor: 'system', guests: c.promotedGuests });
     } catch (e) {
-      console.warn('Skipping stale waitlist entry (likely already canceled):', w.id, e);
+      console.warn('Skipping stale waitlist entry (likely already canceled):', r.id, e);
     }
   }
 }
@@ -2572,6 +2597,7 @@ async function renderRoster() {
   const allRegs = (regsCache[eventId] || []).slice().sort((a,b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
   const mainRegs = allRegs.filter(r => !r.waitlisted);
   const waitRegs = allRegs.filter(r => r.waitlisted);
+  const waitQueue = buildWaitQueue(allRegs);
   const ev = eventsCache.find(e => e.id === eventId);
   const totalSpots = mainRegs.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
 
@@ -2599,9 +2625,9 @@ async function renderRoster() {
   }
   const contactByRegId = isAdmin ? rosterContactCache : {};
 
-  function buildRows(regs) {
+  function buildRows(regs, opts = {}) {
     let rows = '';
-    let num = 1;
+    let num = opts.startNum || 1;
     for (const r of regs) {
       const contact = contactByRegId[r.id] || {};
       const payBadge = (contact.paymentMethod === 'now' || contact.paymentMethod === 'venmo')
@@ -2673,7 +2699,7 @@ async function renderRoster() {
           ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemoveGuest('${r.id}', '${eventId}', ${gi})">Remove</button></td>` : ''}
         </tr>`;
       }
-      for (let wgi = 0; wgi < (r.waitlistedGuests || []).length; wgi++) {
+      for (let wgi = 0; !opts.noPending && wgi < (r.waitlistedGuests || []).length; wgi++) {
         const wg = r.waitlistedGuests[wgi];
         rows += `<tr style="background:rgba(255,193,7,.05);border-left:3px solid var(--gold)">
           ${isAdmin ? '<td></td><td></td>' : ''}
@@ -2703,15 +2729,33 @@ async function renderRoster() {
       })
     : mainRegs;
 
-  const mainRows = buildRows(displayMainRegs);
+  const mainRows = buildRows(displayMainRegs, { noPending: true });
 
   let waitlistSection = '';
-  if (waitRegs.length > 0) {
-    const waitRows = buildRows(waitRegs);
+  if (waitQueue.length > 0) {
+    let waitRows = '';
+    let waitNum = 1;
+    for (const entry of waitQueue) {
+      const r = entry.reg;
+      if (entry.type === 'lead') {
+        waitRows += buildRows([r], { noPending: true, startNum: waitNum });
+        waitNum += 1 + (r.guests?.length || 0);
+      } else {
+        const leadName = he(r.name || 'Unknown');
+        waitRows += `<tr style="background:rgba(255,193,7,.05);border-left:3px solid var(--gold)">
+          ${isAdmin ? '<td></td><td></td>' : ''}
+          <td style="color:var(--muted)">${waitNum++}</td>
+          <td><span style="color:var(--text);font-weight:600">${he(entry.guest.name)}</span> <span style="color:var(--muted);font-size:13px">(${leadName}'s Guest)</span></td>
+          ${isAdmin ? '<td></td><td></td><td></td>' : ''}
+          <td style="color:var(--muted);font-size:13px">${r.signedUpAt?.toDate ? r.signedUpAt.toDate().toLocaleDateString() : ''}</td>
+          ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemoveWaitlistedGuest('${r.id}', '${eventId}', ${entry.idx})">Remove</button></td>` : ''}
+        </tr>`;
+      }
+    }
     waitlistSection = `
     <div class="card" style="padding:0;overflow:hidden;margin-top:16px;border-color:rgba(255,193,7,.3)">
       <div style="padding:14px 20px;border-bottom:1px solid var(--border);background:rgba(255,193,7,.06);display:flex;justify-content:space-between;align-items:center">
-        <span style="font-weight:700;color:var(--gold)">⏳ Waitlist (${waitRegs.length})</span>
+        <span style="font-weight:700;color:var(--gold)">⏳ Waitlist (${waitQueue.length})</span>
         <span style="font-size:13px;color:var(--muted)">In order — first up when a spot opens</span>
       </div>
       <div class="roster-table-wrap"><table class="roster-table">
@@ -2738,7 +2782,7 @@ async function renderRoster() {
       <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
         <span style="font-weight:600">${totalSpots} / ${ev ? ev.spots : '?'} spots filled</span>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          ${waitRegs.length > 0 ? `<span class="waitlist-badge">⏳ ${waitRegs.length} on waitlist</span>` : ''}
+          ${waitQueue.length > 0 ? `<span class="waitlist-badge">⏳ ${waitQueue.length} on waitlist</span>` : ''}
           ${isAdmin ? `<button class="btn btn-outline btn-sm" style="${sortBtnStyle}" onclick="toggleAdminAlphaSort(${!rosterSortAlpha},true);renderRoster()" title="Sort A-Z by first name for easy check-in - groups stay together">${sortBtnLabel}</button>` : ''}
           ${isAdmin ? `<button class="btn btn-outline btn-sm" onclick="toggleSquadsPanel('${eventId}')">👥 Squads &amp; Teams</button>` : ''}
           ${isAdmin ? `<button class="btn btn-primary btn-sm" onclick="openAddPlayerModal()">➕ Add Player</button>` : ''}
@@ -4812,7 +4856,7 @@ function renderAdminEvents() {
       const d = new Date(ev.date + 'T12:00:00');
       const evRegs = regsCache[ev.id] || [];
       const evMainRegs = evRegs.filter(r => !r.waitlisted);
-      const evWaitRegs = evRegs.filter(r => r.waitlisted);
+      const evWaitRegs = buildWaitQueue(evRegs);
       const taken = evMainRegs.reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
       const waitInfo = evWaitRegs.length > 0 ? ` · <span style="color:var(--gold)">⏳ ${evWaitRegs.length} on waitlist</span>` : '';
       const endedBadge = ev.manuallyEnded ? ` <span style="background:rgba(239,68,68,.15);color:var(--danger);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:700;vertical-align:middle">ENDED</span>` : '';
