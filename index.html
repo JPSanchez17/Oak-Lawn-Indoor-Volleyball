@@ -1912,7 +1912,7 @@ function renderNewsInner() {
     el.innerHTML = '<div style="color:var(--muted);font-size:14px">No news yet — check back soon!</div>';
     return;
   }
-  const shown = newsShowAll ? items : items.slice(0, 5);
+  const shown = items.slice(0, 5); // box only ever shows the 5 newest items
   el.innerHTML = shown.map(it => {
     const when = new Date(it.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const isEv = it.kind === 'event';
@@ -1926,8 +1926,7 @@ function renderNewsInner() {
       <div style="font-weight:700;font-size:16px;color:var(--gold)">${he(it.title)}</div>
       ${it.body ? `<div style="font-size:14px;color:#fff;margin-top:3px;line-height:1.5;white-space:pre-wrap">${he(it.body)}</div>` : ''}
     </div>`;
-  }).join('') + (items.length > 5
-    ? `<button class="btn btn-outline btn-sm" onclick="toggleNewsShowAll()">${newsShowAll ? 'Show less' : `Show all (${items.length})`}</button>` : '');
+  }).join('');
 }
 
 function toggleNewsShowAll() { newsShowAll = !newsShowAll; renderNews(); }
