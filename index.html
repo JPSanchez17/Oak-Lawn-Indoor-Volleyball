@@ -772,6 +772,18 @@
     </div>
   </div>
   <div class="container">
+    <div class="card" id="newsBox">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:24px;color:var(--gold);text-transform:uppercase;letter-spacing:1px">📰 News &amp; Updates</div>
+        <button class="btn btn-outline btn-sm" id="newsAddBtn" style="display:none" onclick="toggleNewsForm()">+ Post Update</button>
+      </div>
+      <div id="newsForm" style="display:none;margin-bottom:16px;padding:14px;border:1px dashed var(--border);border-radius:10px">
+        <div class="form-group" style="margin-bottom:10px"><label>Headline</label><input type="text" id="newsTitle" maxlength="80" placeholder="e.g. New: Player messaging is live"></div>
+        <div class="form-group" style="margin-bottom:10px"><label>Details <span style="color:var(--muted);font-weight:400">(optional)</span></label><textarea id="newsBody" maxlength="400" rows="2" placeholder="A sentence or two about the update..."></textarea></div>
+        <div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="submitNewsPost()">Post</button><button class="btn btn-outline btn-sm" onclick="toggleNewsForm()">Cancel</button></div>
+      </div>
+      <div id="newsList"><div style="color:var(--muted);font-size:14px">Loading...</div></div>
+    </div>
     <div class="card" style="text-align:center; border-color: rgba(255,107,0,.3); background: rgba(255,107,0,.05)">
       <p style="font-size:17px; color:var(--text)">🏐 Next open gym coming up — <strong id="nextEventTeaser" style="color:var(--gold)">check the schedule</strong></p>
     </div>
@@ -1429,6 +1441,9 @@ let unsubEvents = null;
 let unsubRegistrations = null;
 let unsubActivityLog = null;
 let unsubBulletinLatest = null;
+let newsCache = [];
+let newsShowAll = false;
+let unsubNews = null;
 let bulletinLatestTs = 0;
 
 // ======================== FRIENDS / MESSAGES STATE ========================
@@ -1777,6 +1792,7 @@ onAuthStateChanged(auth, async (user) => {
     Object.keys(profileUnsubs).forEach(uid => unsubscribeProfile(uid));
     profilesCache = {};
     renderSchedule();
+    renderNews();
     updateBulletinNavBadge();
     restorePageFromHash();
   }
@@ -1797,6 +1813,7 @@ function afterLogin() {
   document.getElementById('adminNavBtn').style.display = currentUser.isAdmin ? '' : 'none';
   if (currentUser.isAdmin) renderAdminEvents();
   renderSchedule();
+  renderNews();
   populateRosterSelect();
   startFriendsAndMessagesListeners();
   updateBulletinNavBadge();
@@ -1811,6 +1828,10 @@ function afterLogin() {
 // script loads rather than waiting on auth state.
 function startPublicListeners() {
   if (unsubEvents || unsubRegistrations) return; // already running
+  unsubNews = onSnapshot(query(collection(db, 'news'), orderBy('createdAt', 'desc'), limit(30)), (snap) => {
+    newsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderNews();
+  }, (err) => { console.error('news listener error', err); renderNews(); });
   unsubBulletinLatest = onSnapshot(query(collection(db, 'bulletin'), orderBy('createdAt', 'desc'), limit(1)), (snap) => {
     bulletinLatestTs = snap.docs[0]?.data()?.createdAt || 0;
     updateBulletinNavBadge();
@@ -1831,6 +1852,7 @@ function startPublicListeners() {
     // events using their start time.
     eventsCache.sort((a, b) => (a.date + (a.startTime || '')).localeCompare(b.date + (b.startTime || '')));
     renderSchedule();
+    renderNews();
     if (currentUser?.isAdmin) renderAdminEvents();
     populateRosterSelect();
   }, (err) => { eventsLoaded = true; renderSchedule(); if (currentUser?.isAdmin) renderAdminEvents(); console.error('events listener error', err); });
@@ -1851,6 +1873,91 @@ function startPublicListeners() {
     }
   }, (err) => console.error('registrations listener error', err));
 }
+
+// ======================== NEWS & UPDATES (HOME) ========================
+// Feed = auto "new open gym" items from events admins create (createdAt) +
+// admin-written posts in the 'news' collection. Newest first.
+function newsTimeMs(v) {
+  if (!v) return Date.now(); // pending serverTimestamp on a just-written doc
+  if (typeof v === 'number') return v;
+  if (v.seconds) return v.seconds * 1000;
+  return Date.now();
+}
+
+function renderNews() {
+  const el = document.getElementById('newsList');
+  if (!el) return;
+  const addBtn = document.getElementById('newsAddBtn');
+  if (addBtn) addBtn.style.display = currentUser?.isAdmin ? '' : 'none';
+
+  const items = [];
+  eventsCache.forEach(ev => {
+    if (!ev.createdAt || ev.manuallyEnded || hasEventEnded(ev)) return;
+    if ((ev.name || '').trim().toLowerCase() === 'test') return; // events named "Test" never show in the news feed
+    const d = new Date(ev.date + 'T12:00:00');
+    items.push({
+      kind: 'event', ts: newsTimeMs(ev.createdAt),
+      title: `New open gym: ${ev.name}`,
+      body: `${d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · ${formatEventTimeRange(ev)} · ${ev.location}`
+    });
+  });
+  newsCache.forEach(n => items.push({ kind: 'news', id: n.id, ts: newsTimeMs(n.createdAt), title: n.title || '', body: n.body || '' }));
+  items.sort((a, b) => b.ts - a.ts);
+
+  if (!items.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:14px">No news yet — check back soon!</div>';
+    return;
+  }
+  const shown = newsShowAll ? items : items.slice(0, 5);
+  el.innerHTML = shown.map(it => {
+    const when = new Date(it.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const isEv = it.kind === 'event';
+    const tag = isEv
+      ? '<span class="bb-tag bb-tag-lfp" style="margin-right:0">New Event</span>'
+      : '<span class="bb-tag bb-tag-lft" style="margin-right:0">Update</span>';
+    const del = (!isEv && currentUser?.isAdmin)
+      ? `<button class="btn btn-danger btn-sm" style="padding:3px 9px" onclick="event.stopPropagation();deleteNewsPost('${it.id}')">✕</button>` : '';
+    return `<div ${isEv ? `onclick="showPage('schedule')" style="cursor:pointer;` : `style="`}padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;text-align:left">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">${tag}<span style="font-size:12px;color:var(--muted)">${when}</span><span style="margin-left:auto">${del}</span></div>
+      <div style="font-weight:700;font-size:16px;color:var(--text)">${he(it.title)}</div>
+      ${it.body ? `<div style="font-size:14px;color:var(--muted);margin-top:3px;line-height:1.5;white-space:pre-wrap">${he(it.body)}</div>` : ''}
+    </div>`;
+  }).join('') + (items.length > 5
+    ? `<button class="btn btn-outline btn-sm" onclick="toggleNewsShowAll()">${newsShowAll ? 'Show less' : `Show all (${items.length})`}</button>` : '');
+}
+
+function toggleNewsShowAll() { newsShowAll = !newsShowAll; renderNews(); }
+
+function toggleNewsForm() {
+  if (!currentUser?.isAdmin) return;
+  const f = document.getElementById('newsForm');
+  f.style.display = f.style.display === 'none' ? '' : 'none';
+}
+
+async function submitNewsPost() {
+  if (!currentUser?.isAdmin) return;
+  const title = document.getElementById('newsTitle').value.trim();
+  const body = document.getElementById('newsBody').value.trim();
+  if (!title) return showToast('Please add a headline.', true);
+  try {
+    await addDoc(collection(db, 'news'), { title, body, createdAt: serverTimestamp(), author: currentUser.uid });
+    document.getElementById('newsTitle').value = '';
+    document.getElementById('newsBody').value = '';
+    document.getElementById('newsForm').style.display = 'none';
+    showToast('Update posted! 📰');
+  } catch (e) {
+    console.error('submitNewsPost error:', e);
+    showToast('Could not post. ' + (e.code === 'permission-denied' ? 'Permission denied — add Firestore rules for the news collection.' : 'Try again.'), true);
+  }
+}
+
+async function deleteNewsPost(id) {
+  if (!currentUser?.isAdmin) return;
+  if (!confirm('Delete this update?')) return;
+  try { await deleteDoc(doc(db, 'news', id)); showToast('Update deleted.'); }
+  catch (e) { showToast('Could not delete update.', true); }
+}
+
 startPublicListeners();
 
 
@@ -5226,6 +5333,7 @@ function unlockWaiverCheckbox() {
 }
 
 Object.assign(window, {
+  toggleNewsForm, submitNewsPost, deleteNewsPost, toggleNewsShowAll,
   login, login2, register, register2, googleSignIn, logout,
   addEvent, deleteEvent, openEditEventModal, submitEditEvent, openEventSignup, confirmSignup, cancelSignup,
   openManageGroup, removeGuestFromSignup, cancelSelfFromGroup,
