@@ -1917,8 +1917,8 @@ function renderNewsInner() {
     const when = new Date(it.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const isEv = it.kind === 'event';
     const tag = isEv
-      ? '<span class="bb-tag bb-tag-lfp" style="margin-right:0">New Event</span>'
-      : '<span class="bb-tag bb-tag-lft" style="margin-right:0">Update</span>';
+      ? '<span class="bb-tag" style="margin-right:0;background:rgba(255,59,48,.25);color:#ff5a4d;border:1px solid rgba(255,90,77,.55)">New Event</span>'
+      : '<span class="bb-tag" style="margin-right:0;background:rgba(34,197,94,.22);color:#4ade80;border:1px solid rgba(74,222,128,.5)">Update</span>';
     const del = (!isEv && currentUser?.isAdmin)
       ? `<button class="btn btn-danger btn-sm" style="padding:3px 9px" onclick="event.stopPropagation();deleteNewsPost('${it.id}')">✕</button>` : '';
     return `<div ${isEv ? `onclick="showPage('schedule')" style="cursor:pointer;` : `style="`}padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;text-align:left">
