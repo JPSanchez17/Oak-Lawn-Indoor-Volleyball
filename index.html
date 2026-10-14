@@ -781,8 +781,8 @@
         <button class="btn btn-outline btn-sm" id="newsAddBtn" style="display:none" onclick="toggleNewsForm()">+ Post Update</button>
       </div>
       <div id="newsForm" style="display:none;margin-bottom:16px;padding:14px;border:1px dashed var(--border);border-radius:10px">
-        <div class="form-group" style="margin-bottom:10px"><label>Headline</label><input type="text" id="newsTitle" maxlength="80" placeholder="e.g. New: Player messaging is live"></div>
-        <div class="form-group" style="margin-bottom:10px"><label>Details <span style="color:var(--muted);font-weight:400">(optional)</span></label><textarea id="newsBody" maxlength="400" rows="2" placeholder="A sentence or two about the update..."></textarea></div>
+        <div class="form-group" style="margin-bottom:10px"><label>Headline</label><input type="text" id="newsTitle" maxlength="150" placeholder="e.g. New: Player messaging is live"></div>
+        <div class="form-group" style="margin-bottom:10px"><label>Details <span style="color:var(--muted);font-weight:400">(optional)</span></label><textarea id="newsBody" maxlength="2000" rows="4" placeholder="A sentence or two about the update..."></textarea></div>
         <div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="submitNewsPost()">Post</button><button class="btn btn-outline btn-sm" onclick="toggleNewsForm()">Cancel</button></div>
       </div>
       <div id="newsList"><div style="color:var(--muted);font-size:14px">Loading...</div></div>
