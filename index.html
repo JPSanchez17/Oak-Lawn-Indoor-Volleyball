@@ -772,6 +772,9 @@
     </div>
   </div>
   <div class="container">
+    <div class="card" style="text-align:center; border-color: rgba(255,107,0,.3); background: rgba(255,107,0,.05)">
+      <p style="font-size:17px; color:var(--text)">🏐 Next open gym coming up — <strong id="nextEventTeaser" style="color:var(--gold)">check the schedule</strong></p>
+    </div>
     <div class="card" id="newsBox">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">
         <div style="font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:24px;color:var(--gold);text-transform:uppercase;letter-spacing:1px">📰 News &amp; Updates</div>
@@ -783,9 +786,6 @@
         <div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="submitNewsPost()">Post</button><button class="btn btn-outline btn-sm" onclick="toggleNewsForm()">Cancel</button></div>
       </div>
       <div id="newsList"><div style="color:var(--muted);font-size:14px">Loading...</div></div>
-    </div>
-    <div class="card" style="text-align:center; border-color: rgba(255,107,0,.3); background: rgba(255,107,0,.05)">
-      <p style="font-size:17px; color:var(--text)">🏐 Next open gym coming up — <strong id="nextEventTeaser" style="color:var(--gold)">check the schedule</strong></p>
     </div>
   </div>
 </div>
@@ -1885,6 +1885,10 @@ function newsTimeMs(v) {
 }
 
 function renderNews() {
+  try { renderNewsInner(); } catch (e) { console.error('renderNews error', e); }
+}
+
+function renderNewsInner() {
   const el = document.getElementById('newsList');
   if (!el) return;
   const addBtn = document.getElementById('newsAddBtn');
@@ -1947,7 +1951,7 @@ async function submitNewsPost() {
     showToast('Update posted! 📰');
   } catch (e) {
     console.error('submitNewsPost error:', e);
-    showToast('Could not post. ' + (e.code === 'permission-denied' ? 'Permission denied — add Firestore rules for the news collection.' : 'Try again.'), true);
+    showToast('Could not post' + (e.code === 'permission-denied' ? ': Firestore rules are blocking the news collection — publish the updated rules.' : ` (${e.code || e.message || 'unknown error'}).`), true);
   }
 }
 
@@ -2171,13 +2175,15 @@ function renderSchedule() {
         actionBtn = `<span style="color:var(--success);font-weight:700;font-size:14px">✅ Signed Up${guestLabel}</span>
                      ${hasGuests
                        ? `<button class="btn btn-outline btn-sm" onclick="openManageGroup('${ev.id}')">Manage Group</button>`
-                       : `<button class="btn btn-outline btn-sm" onclick="cancelSignup('${ev.id}')">Cancel</button>`}`;
+                       : `<button class="btn btn-outline btn-sm" onclick="openManageGroup('${ev.id}')">+ Guest</button>
+                          <button class="btn btn-outline btn-sm" onclick="cancelSignup('${ev.id}')">Cancel</button>`}`;
       } else if (myWaitlist) {
         const pendingN = myWaitlist.waitlistedGuests?.length || 0;
         actionBtn = `<span class="waitlist-badge">⏳ Waitlist #${waitPos}${pendingN ? ` +${pendingN} guest${pendingN > 1 ? 's' : ''}` : ''}</span>
                      ${pendingN
                        ? `<button class="btn btn-outline btn-sm" style="margin-top:4px" onclick="openManageGroup('${ev.id}')">Manage Group</button>`
-                       : `<button class="btn btn-outline btn-sm" style="margin-top:4px" onclick="cancelSignup('${ev.id}')">Leave Waitlist</button>`}`;
+                       : `<button class="btn btn-outline btn-sm" style="margin-top:4px" onclick="openManageGroup('${ev.id}')">+ Guest</button>
+                          <button class="btn btn-outline btn-sm" style="margin-top:4px" onclick="cancelSignup('${ev.id}')">Leave Waitlist</button>`}`;
       } else if (intermediateGated) {
         actionBtn = `<button class="btn btn-outline btn-sm" onclick="goToSkillLevelSetting()" title="Update your skill level on your profile">🔒 B Level and above</button>`;
       } else if (full) {
@@ -2494,7 +2500,61 @@ function openManageGroup(eventId) {
   });
 
   document.getElementById('mgm-list').innerHTML = html;
+  const addBlock = document.getElementById('mgm-add');
+  if (addBlock) addBlock.style.display = (ev && hasEventEnded(ev) && !currentUser.isAdmin) ? 'none' : '';
   openModal('manageGroupModal');
+}
+
+async function addGuestToSignup() {
+  if (!currentUser || !currentManageGroupEventId) return;
+  const eventId = currentManageGroupEventId;
+  const ev = eventsCache.find(e => e.id === eventId);
+  const input = document.getElementById('mgmGuestInput');
+  const name = (input.value || '').replace(/\s+/g, ' ').trim();
+  if (!name) return;
+  if (!ev) return;
+  if (hasEventEnded(ev) && !currentUser.isAdmin) return showToast('This event has ended.', true);
+
+  const regs = regsCache[eventId] || [];
+  const mine = regs.find(r => r.uid === currentUser.uid);
+  if (!mine) return showToast('You are not signed up for this event.', true);
+
+  const guests = mine.guests || [];
+  const pending = mine.waitlistedGuests || [];
+  if (guests.length + pending.length >= 10) return showToast('Max 10 guests per sign-up.', true);
+  const lower = name.toLowerCase();
+  if ([...guests, ...pending].some(g => (g.name || '').toLowerCase() === lower)) return showToast('That guest is already in your group.', true);
+
+  // Room check: spots taken by everyone currently on the main roster (each
+  // registrant + their confirmed guests). If you're on the waitlist yourself,
+  // or you already have waitlisted guests ahead of this one, the new guest
+  // joins the waitlist too so the order stays fair.
+  const taken = regs.filter(r => !r.waitlisted).reduce((sum, r) => sum + 1 + (r.guests?.length || 0), 0);
+  const hasRoom = !mine.waitlisted && pending.length === 0 && taken < ev.spots;
+  const btn = document.getElementById('mgmAddBtn');
+
+  if (currentUser.shadowbanned) {
+    input.value = '';
+    showToast(hasRoom ? 'Guest added! 🏐' : "Guest added to the waitlist. We'll move them up if a spot opens.");
+    return;
+  }
+
+  try {
+    if (btn) btn.disabled = true;
+    const update = hasRoom
+      ? { guests: [...guests, { name }] }
+      : { waitlistedGuests: [...pending, { name, addedAt: Date.now() }] };
+    await setDoc(doc(db, 'registrations', mine.id), update, { merge: true });
+    input.value = '';
+    logActivity(eventId, hasRoom ? 'guest_add' : 'guest_add_waitlist', { name: mine.name, uid: mine.uid, actor: 'self', guests: [name] });
+    showToast(hasRoom ? 'Guest added! 🏐' : "Event is full — guest added to the waitlist. We'll move them up if a spot opens.");
+    openManageGroup(eventId);
+  } catch (e) {
+    console.error('addGuestToSignup error:', e);
+    showToast('Could not add guest. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function removeGuestFromSignup(regId, eventId, guestIndex) {
@@ -2568,16 +2628,24 @@ async function cancelSelfFromGroup(eventId) {
 // registrant is one entry, and each pending guest is its own entry placed
 // right after their party lead (ordered by when the lead signed up).
 function buildWaitQueue(regs) {
-  const sorted = regs
-    .filter(r => r.waitlisted || (r.waitlistedGuests?.length > 0))
-    .slice()
-    .sort((a, b) => ((a.signedUpAt?.seconds) || 0) - ((b.signedUpAt?.seconds) || 0));
-  const queue = [];
-  for (const r of sorted) {
-    if (r.waitlisted) queue.push({ type: 'lead', reg: r });
-    (r.waitlistedGuests || []).forEach((g, idx) => queue.push({ type: 'guest', reg: r, guest: g, idx }));
+  // One line for everyone, ordered by when each person actually joined it:
+  // a lead by their sign-up time, a waitlisted guest by the moment that guest
+  // was added (addedAt). Guests with no addedAt (added during sign-up, or
+  // saved before this field existed) count as joining with their lead.
+  const entries = [];
+  for (const r of regs) {
+    const signedMs = ((r.signedUpAt?.seconds) || 0) * 1000;
+    if (r.waitlisted) entries.push({ type: 'lead', reg: r, t: signedMs, idx: -1 });
+    (r.waitlistedGuests || []).forEach((g, idx) => {
+      entries.push({ type: 'guest', reg: r, guest: g, idx, t: typeof g.addedAt === 'number' ? Math.max(g.addedAt, signedMs) : signedMs });
+    });
   }
-  return queue;
+  entries.sort((a, b) =>
+    (a.t - b.t)
+    || ((a.type === 'lead' ? 0 : 1) - (b.type === 'lead' ? 0 : 1))
+    || (a.reg.id < b.reg.id ? -1 : a.reg.id > b.reg.id ? 1 : 0)
+    || (a.idx - b.idx));
+  return entries;
 }
 
 async function promoteFromWaitlist(eventId) {
@@ -4488,6 +4556,8 @@ const ACTIVITY_TYPE_META = {
   admin_add_waitlist:   { icon: '👤', label: 'Added to waitlist by admin' },
   admin_remove:         { icon: '🗑️', label: 'Removed by admin' },
   admin_remove_waitlist:{ icon: '🗑️', label: 'Removed from waitlist by admin' },
+  guest_add:            { icon: '➕', label: 'Added a guest' },
+  guest_add_waitlist:   { icon: '⏳', label: 'Added a guest (waitlisted)' },
   guest_remove:         { icon: '🚪', label: 'Removed a guest' },
   admin_remove_guest:   { icon: '🗑️', label: 'Removed a guest by admin' },
   guests_promoted:      { icon: '⬆️', label: 'Guests promoted from waitlist' }
@@ -5333,6 +5403,7 @@ function unlockWaiverCheckbox() {
 }
 
 Object.assign(window, {
+  addGuestToSignup,
   toggleNewsForm, submitNewsPost, deleteNewsPost, toggleNewsShowAll,
   login, login2, register, register2, googleSignIn, logout,
   addEvent, deleteEvent, openEditEventModal, submitEditEvent, openEventSignup, confirmSignup, cancelSignup,
@@ -5603,8 +5674,15 @@ Object.assign(window, {
   <div class="modal" style="position:relative">
     <button class="modal-close" onclick="closeModal('manageGroupModal')">✕</button>
     <h2 id="mgm-title">Manage Your Group</h2>
-    <p style="color:var(--muted);font-size:14px;margin-bottom:20px">Remove individual guests without cancelling the whole group.</p>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:20px">Add or remove guests without cancelling the whole group. If the event is full, new guests go on the waitlist automatically.</p>
     <div id="mgm-list"></div>
+    <div id="mgm-add" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <label style="display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px">Add a guest</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="mgmGuestInput" maxlength="60" placeholder="Guest's full name" onkeydown="if(event.key==='Enter'){event.preventDefault();addGuestToSignup();}" style="flex:1;min-width:0;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px">
+        <button type="button" class="btn btn-primary btn-sm" id="mgmAddBtn" style="white-space:nowrap" onclick="addGuestToSignup()">Add</button>
+      </div>
+    </div>
   </div>
 </div>
 
