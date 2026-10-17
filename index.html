@@ -693,6 +693,14 @@
   .btn-waitlist { background: linear-gradient(135deg, #8B5E00, var(--gold)); color: #000; }
   .btn-waitlist:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(255,193,7,.4); }
 
+  /* Admin roster reordering */
+  .drag-handle { cursor: grab; color: var(--muted); font-size: 18px; padding: 0 6px; user-select: none; -webkit-user-select: none; }
+  .drag-handle:active { cursor: grabbing; }
+  .move-btn { padding: 1px 7px !important; font-size: 11px !important; margin-left: 2px; }
+  .move-btn:disabled { opacity: .3; cursor: default; transform: none !important; box-shadow: none !important; }
+  .roster-table tr.drop-over td { box-shadow: inset 0 3px 0 var(--gold); }
+  .roster-table tr.drop-over.drop-below td { box-shadow: inset 0 -3px 0 var(--gold); }
+
   .bb-tag-lft  { background: rgba(91,111,212,.2); color: var(--sky); }
   .bb-tag-lfp  { background: rgba(255,98,0,.15); color: var(--fire); }
   .bb-tag-sub  { background: rgba(34,197,94,.15); color: var(--success); }
@@ -2623,6 +2631,17 @@ async function cancelSelfFromGroup(eventId) {
   }
 }
 
+// Orders main-list registrations: admin-arranged ones first (by listOrder),
+// anyone without an explicit order after them, by sign-up time.
+function sortByListOrder(regs) {
+  return regs.slice().sort((a, b) => {
+    const ao = typeof a.listOrder === 'number', bo = typeof b.listOrder === 'number';
+    if (ao && bo) return a.listOrder - b.listOrder;
+    if (ao !== bo) return ao ? -1 : 1;
+    return ((a.signedUpAt?.seconds) || 0) - ((b.signedUpAt?.seconds) || 0);
+  });
+}
+
 // Builds the ordered waitlist queue as separate entries: each waitlisted
 // registrant is one entry, and each pending guest is its own entry placed
 // right after their party lead (ordered by when the lead signed up).
@@ -2634,13 +2653,17 @@ function buildWaitQueue(regs) {
   const entries = [];
   for (const r of regs) {
     const signedMs = ((r.signedUpAt?.seconds) || 0) * 1000;
-    if (r.waitlisted) entries.push({ type: 'lead', reg: r, t: signedMs, idx: -1 });
+    if (r.waitlisted) entries.push({ type: 'lead', reg: r, t: signedMs, idx: -1, o: typeof r.waitQueueOrder === 'number' ? r.waitQueueOrder : null });
     (r.waitlistedGuests || []).forEach((g, idx) => {
-      entries.push({ type: 'guest', reg: r, guest: g, idx, t: typeof g.addedAt === 'number' ? Math.max(g.addedAt, signedMs) : signedMs });
+      entries.push({ type: 'guest', reg: r, guest: g, idx, t: typeof g.addedAt === 'number' ? Math.max(g.addedAt, signedMs) : signedMs, o: typeof g.queueOrder === 'number' ? g.queueOrder : null });
     });
   }
+  // Admin-arranged entries (queueOrder / waitQueueOrder) come first, in the
+  // order the admin set. Anyone who joined after the last rearrange has no
+  // explicit order yet and simply falls in behind, by join time.
   entries.sort((a, b) =>
-    (a.t - b.t)
+    ((a.o !== null && b.o !== null) ? (a.o - b.o) : (a.o !== null ? -1 : b.o !== null ? 1 : 0))
+    || (a.t - b.t)
     || ((a.type === 'lead' ? 0 : 1) - (b.type === 'lead' ? 0 : 1))
     || (a.reg.id < b.reg.id ? -1 : a.reg.id > b.reg.id ? 1 : 0)
     || (a.idx - b.idx));
@@ -2769,7 +2792,7 @@ async function renderRoster() {
   if (!eventId) { el.innerHTML = ''; return; }
 
   const allRegs = (regsCache[eventId] || []).slice().sort((a,b) => ((a.signedUpAt?.seconds)||0) - ((b.signedUpAt?.seconds)||0));
-  const mainRegs = allRegs.filter(r => !r.waitlisted);
+  const mainRegs = sortByListOrder(allRegs.filter(r => !r.waitlisted));
   const waitRegs = allRegs.filter(r => r.waitlisted);
   const waitQueue = buildWaitQueue(allRegs);
   const ev = eventsCache.find(e => e.id === eventId);
@@ -2799,11 +2822,31 @@ async function renderRoster() {
   }
   const contactByRegId = isAdmin ? rosterContactCache : {};
 
+  // Drag handle + up/down arrows (arrows also work on phones, where HTML5 drag doesn't)
+  function moveCellHtml(group, key, idx, total) {
+    const fn = group === 'main' ? 'adminMoveMain' : 'adminMoveWait';
+    const btn = (label, to, ok, title) => `<button class="btn btn-outline btn-sm move-btn" ${ok ? '' : 'disabled'} onclick="${fn}('${eventId}','${key}',${to})" title="${title}">${label}</button>`;
+    return `<td style="white-space:nowrap"><span class="drag-handle" draggable="true" data-drag="${group}" data-key="${key}" title="Drag to reorder">⠿</span>${btn('▲', idx - 1, idx > 0, 'Move up')}${btn('▼', idx + 1, idx < total - 1, 'Move down')}</td>`;
+  }
+
   function buildRows(regs, opts = {}) {
     let rows = '';
     let num = opts.startNum || 1;
     for (const r of regs) {
       const contact = contactByRegId[r.id] || {};
+      let moveTd = '', dropAttrs = '';
+      if (isAdmin) {
+        if (opts.moveGroup === 'main') {
+          const mi = regs.indexOf(r);
+          moveTd = moveCellHtml('main', r.id, mi, regs.length);
+          dropAttrs = `data-dropgroup="main" data-dropindex="${mi}"`;
+        } else if (opts.moveGroup === 'wait') {
+          moveTd = moveCellHtml('wait', opts.moveKey, opts.moveIdx, opts.moveTotal);
+          dropAttrs = `data-dropgroup="wait" data-dropindex="${opts.moveIdx}"`;
+        } else {
+          moveTd = '<td></td>';
+        }
+      }
       const payBadge = (contact.paymentMethod === 'now' || contact.paymentMethod === 'venmo')
         ? '<span style="background:rgba(91,111,212,.15);color:var(--sky);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:700">📱 Pay Now (Venmo/Zelle)</span>'
         : (contact.paymentMethod === 'door' || contact.paymentMethod === 'cash')
@@ -2828,7 +2871,8 @@ async function renderRoster() {
         </label>
       </td>` : '';
 
-      rows += `<tr id="${paidRowId}" style="${paid && isAdmin ? 'background:rgba(34,197,94,.04)' : ''}">
+      rows += `<tr id="${paidRowId}" ${dropAttrs} style="${paid && isAdmin ? 'background:rgba(34,197,94,.04)' : ''}">
+        ${moveTd}
         ${paidCell}
         ${needsPayCell}
         <td style="color:var(--muted)">${num++}</td>
@@ -2861,7 +2905,8 @@ async function renderRoster() {
             <span id="${gNeedsPayLabelId}" style="font-size:12px;font-weight:700;color:${gNeedsPay ? 'var(--gold)' : 'var(--muted)'}">${gNeedsPay ? 'Owes' : ''}</span>
           </label>
         </td>` : '';
-        rows += `<tr id="${gPaidRowId}" style="background:${gPaid && isAdmin ? 'rgba(34,197,94,.06)' : 'rgba(91,111,212,.06)'};border-left:3px solid var(--sky)">
+        rows += `<tr id="${gPaidRowId}" ${dropAttrs} style="background:${gPaid && isAdmin ? 'rgba(34,197,94,.06)' : 'rgba(91,111,212,.06)'};border-left:3px solid var(--sky)">
+          ${isAdmin ? '<td></td>' : ''}
           ${gPaidCell}
           ${gNeedsPayCell}
           <td style="color:var(--muted)">${num++}</td>
@@ -2876,7 +2921,7 @@ async function renderRoster() {
       for (let wgi = 0; !opts.noPending && wgi < (r.waitlistedGuests || []).length; wgi++) {
         const wg = r.waitlistedGuests[wgi];
         rows += `<tr style="background:rgba(255,193,7,.05);border-left:3px solid var(--gold)">
-          ${isAdmin ? '<td></td><td></td>' : ''}
+          ${isAdmin ? '<td></td><td></td><td></td>' : ''}
           <td style="color:var(--muted)">—</td>
           <td style="padding-left:24px"><span style="color:var(--muted)">↳</span> <span style="color:var(--text);font-weight:600">${he(wg.name)}</span> <span class="waitlist-badge" style="font-size:11px;padding:2px 9px">Waitlisted Guest</span></td>
           ${isAdmin ? '<td></td><td></td><td></td>' : ''}
@@ -2903,23 +2948,43 @@ async function renderRoster() {
       })
     : mainRegs;
 
-  const mainRows = buildRows(displayMainRegs, { noPending: true });
+  const mainRows = buildRows(displayMainRegs, { noPending: true, moveGroup: (isAdmin && !rosterSortAlpha) ? 'main' : null });
 
   let waitlistSection = '';
   if (waitQueue.length > 0) {
     let waitRows = '';
     let waitNum = 1;
-    for (const entry of waitQueue) {
+    for (const [qi, entry] of waitQueue.entries()) {
       const r = entry.reg;
       if (entry.type === 'lead') {
-        waitRows += buildRows([r], { noPending: true, startNum: waitNum });
+        waitRows += buildRows([r], { noPending: true, startNum: waitNum, moveGroup: 'wait', moveKey: `L|${r.id}`, moveIdx: qi, moveTotal: waitQueue.length });
         waitNum += 1 + (r.guests?.length || 0);
       } else {
         const leadName = he(r.name || 'Unknown');
-        waitRows += `<tr style="background:rgba(255,193,7,.05);border-left:3px solid var(--gold)">
-          ${isAdmin ? '<td></td><td></td>' : ''}
+        const wg = entry.guest;
+        const wgKey = `G|${r.id}|${entry.idx}`;
+        const wgPaid = !!wg.paymentReceived;
+        const wgNeeds = !!wg.needsToPay;
+        const wgPaidCell = isAdmin ? `<td>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
+            <input type="checkbox" ${wgPaid ? 'checked' : ''} onchange="adminToggleWaitGuestPayment('${r.id}', '${eventId}', ${entry.idx}, this.checked)"
+              style="width:16px;height:16px;accent-color:var(--success);cursor:pointer">
+            <span id="wgpl-${r.id}-${entry.idx}" style="font-size:12px;font-weight:700;color:${wgPaid ? 'var(--success)' : 'var(--muted)'}">${wgPaid ? '✓ Paid' : 'Pending'}</span>
+          </label>
+        </td>` : '';
+        const wgNeedsCell = isAdmin ? `<td>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
+            <input type="checkbox" ${wgNeeds ? 'checked' : ''} onchange="adminToggleWaitGuestNeedsPay('${r.id}', '${eventId}', ${entry.idx}, this.checked)"
+              style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer">
+            <span id="wgnpl-${r.id}-${entry.idx}" style="font-size:12px;font-weight:700;color:${wgNeeds ? 'var(--gold)' : 'var(--muted)'}">${wgNeeds ? 'Owes' : ''}</span>
+          </label>
+        </td>` : '';
+        waitRows += `<tr ${isAdmin ? `data-dropgroup="wait" data-dropindex="${qi}"` : ''} style="background:rgba(255,193,7,.05);border-left:3px solid var(--gold)">
+          ${isAdmin ? moveCellHtml('wait', wgKey, qi, waitQueue.length) : ''}
+          ${wgPaidCell}
+          ${wgNeedsCell}
           <td style="color:var(--muted)">${waitNum++}</td>
-          <td><span style="color:var(--text);font-weight:600">${he(entry.guest.name)}</span> <span style="color:var(--muted);font-size:13px">(${leadName}'s Guest)</span></td>
+          <td><span style="color:var(--text);font-weight:600">${he(wg.name)}</span> <span style="color:var(--muted);font-size:13px">(${leadName}'s Guest)</span></td>
           ${isAdmin ? '<td></td><td></td><td></td>' : ''}
           <td style="color:var(--muted);font-size:13px">${r.signedUpAt?.toDate ? r.signedUpAt.toDate().toLocaleDateString() : ''}</td>
           ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemoveWaitlistedGuest('${r.id}', '${eventId}', ${entry.idx})">Remove</button></td>` : ''}
@@ -2930,10 +2995,11 @@ async function renderRoster() {
     <div class="card" style="padding:0;overflow:hidden;margin-top:16px;border-color:rgba(255,193,7,.3)">
       <div style="padding:14px 20px;border-bottom:1px solid var(--border);background:rgba(255,193,7,.06);display:flex;justify-content:space-between;align-items:center">
         <span style="font-weight:700;color:var(--gold)">⏳ Waitlist (${waitQueue.length})</span>
-        <span style="font-size:13px;color:var(--muted)">In order — first up when a spot opens</span>
+        <span style="font-size:13px;color:var(--muted)">In order — first up when a spot opens${isAdmin ? ' · drag ⠿ or use ▲▼ to rearrange' : ''}</span>
       </div>
       <div class="roster-table-wrap"><table class="roster-table">
         <thead><tr>
+          ${isAdmin ? '<th>Order</th>' : ''}
           ${isAdmin ? '<th>Paid</th>' : ''}
           ${isAdmin ? '<th>Needs to Pay</th>' : ''}
           <th>#</th><th>Name</th>
@@ -2967,6 +3033,7 @@ async function renderRoster() {
       ${isAdmin && rosterSortAlpha ? `<div style="padding:7px 20px;background:rgba(255,193,7,.07);border-bottom:1px solid rgba(255,193,7,.25);font-size:12px;color:var(--gold)">🔤 Sorted A–Z by first name — groups stay together for check-in</div>` : ''}
       <div class="roster-table-wrap"><table class="roster-table">
         <thead><tr>
+          ${isAdmin ? '<th>Order</th>' : ''}
           ${isAdmin ? '<th>Paid</th>' : ''}
           ${isAdmin ? '<th>Needs to Pay</th>' : ''}
           <th>#</th><th>Name</th>
@@ -3560,6 +3627,149 @@ async function adminRemoveWaitlistedGuest(regId, eventId, idx) {
     showToast('Could not remove guest. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
   }
 }
+
+// Payment flags for guests who are still on the waitlist. They live on the
+// waitlistedGuests entries, so they travel with the guest when promoted.
+// Uses a transaction (like the confirmed-guest toggles) so back-to-back
+// clicks can't overwrite each other.
+async function adminToggleWaitGuestFlag(regId, eventId, idx, field, value) {
+  const reg = (regsCache[eventId] || []).find(r => r.id === regId);
+  const prevGuests = reg ? reg.waitlistedGuests : null;
+  const isPaid = field === 'paymentReceived';
+  const labelEl = document.getElementById(`${isPaid ? 'wgpl' : 'wgnpl'}-${regId}-${idx}`);
+  const paint = (v) => {
+    if (!labelEl) return;
+    labelEl.textContent = isPaid ? (v ? '✓ Paid' : 'Pending') : (v ? 'Owes' : '');
+    labelEl.style.color = v ? (isPaid ? 'var(--success)' : 'var(--gold)') : 'var(--muted)';
+  };
+  if (reg) reg.waitlistedGuests = (reg.waitlistedGuests || []).map((g, i) => i === idx ? { ...g, [field]: value } : g);
+  paint(value);
+  const regRef = doc(db, 'registrations', regId);
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(regRef);
+      if (!snap.exists()) throw new Error('not-found');
+      const guests = snap.data().waitlistedGuests || [];
+      if (idx >= guests.length) throw new Error('not-found');
+      tx.set(regRef, { waitlistedGuests: guests.map((g, i) => i === idx ? { ...g, [field]: value } : g) }, { merge: true });
+    });
+    showToast(isPaid
+      ? (value ? 'Guest payment marked as received.' : 'Guest payment marked as pending.')
+      : (value ? 'Guest marked as needing to pay.' : 'Guest marked as not needing to pay.'));
+  } catch (e) {
+    if (reg) reg.waitlistedGuests = prevGuests;
+    paint(!value);
+    showToast('Could not update guest status. ' + (e.code === 'permission-denied' ? 'Permission denied.' : 'Try again.'), true);
+  }
+}
+function adminToggleWaitGuestPayment(regId, eventId, idx, received) { return adminToggleWaitGuestFlag(regId, eventId, idx, 'paymentReceived', received); }
+function adminToggleWaitGuestNeedsPay(regId, eventId, idx, needsPay) { return adminToggleWaitGuestFlag(regId, eventId, idx, 'needsToPay', needsPay); }
+
+// Rearrange the main player list. Each registrant moves together with their
+// confirmed guests. Order is saved as listOrder on each registration.
+async function adminMoveMain(eventId, regId, toIndex) {
+  const order = sortByListOrder((regsCache[eventId] || []).filter(r => !r.waitlisted));
+  const from = order.findIndex(r => r.id === regId);
+  if (from < 0 || toIndex < 0 || toIndex >= order.length || from === toIndex) return;
+  const [moved] = order.splice(from, 1);
+  order.splice(toIndex, 0, moved);
+  const changed = [];
+  order.forEach((r, i) => { if (r.listOrder !== i) changed.push([r, i]); r.listOrder = i; });
+  renderRoster();
+  try {
+    const batch = writeBatch(db);
+    changed.forEach(([r, i]) => batch.update(doc(db, 'registrations', r.id), { listOrder: i }));
+    await batch.commit();
+    logActivity(eventId, 'admin_reorder', { name: moved.name, uid: moved.uid, actor: 'admin' });
+  } catch (e) {
+    showToast('Could not save the new order. ' + (e.code === 'permission-denied' ? 'Permission denied — check Firestore rules.' : 'Try again.'), true);
+  }
+}
+
+// Rearrange the waitlist. Every waitlisted person and every waitlisted guest
+// is its own line in the queue, and promotion follows this order. Saved as
+// waitQueueOrder on a registration (lead) or queueOrder on a waitlisted guest.
+async function adminMoveWait(eventId, key, toIndex) {
+  const queue = buildWaitQueue(regsCache[eventId] || []);
+  const keyOf = e => e.type === 'lead' ? `L|${e.reg.id}` : `G|${e.reg.id}|${e.idx}`;
+  const from = queue.findIndex(e => keyOf(e) === key);
+  if (from < 0 || toIndex < 0 || toIndex >= queue.length || from === toIndex) return;
+  const [moved] = queue.splice(from, 1);
+  queue.splice(toIndex, 0, moved);
+
+  // A guest can't be seated before the person who signed them up, so don't
+  // allow an order where a guest sits ahead of their own waitlisted lead.
+  for (let i = 0; i < queue.length; i++) {
+    const e = queue[i];
+    if (e.type !== 'guest') continue;
+    const li = queue.findIndex(x => x.type === 'lead' && x.reg.id === e.reg.id);
+    if (li > i) return showToast("A guest can't be placed ahead of the player who signed them up.", true);
+  }
+
+  const updates = {};
+  queue.forEach((e, i) => {
+    const u = updates[e.reg.id] || (updates[e.reg.id] = { reg: e.reg });
+    if (e.type === 'lead') {
+      if (e.reg.waitQueueOrder !== i) u.waitQueueOrder = i;
+    } else {
+      if (!u.guests) u.guests = (e.reg.waitlistedGuests || []).map(g => ({ ...g }));
+      if (u.guests[e.idx].queueOrder !== i) { u.guests[e.idx].queueOrder = i; u.guestsChanged = true; }
+    }
+  });
+  const batch = writeBatch(db);
+  for (const u of Object.values(updates)) {
+    const data = {};
+    if (u.waitQueueOrder !== undefined) { data.waitQueueOrder = u.waitQueueOrder; u.reg.waitQueueOrder = u.waitQueueOrder; }
+    if (u.guestsChanged) { data.waitlistedGuests = u.guests; u.reg.waitlistedGuests = u.guests; }
+    if (Object.keys(data).length) batch.update(doc(db, 'registrations', u.reg.id), data);
+  }
+  renderRoster();
+  try {
+    await batch.commit();
+    logActivity(eventId, 'admin_reorder_waitlist', {
+      name: moved.type === 'lead' ? moved.reg.name : `${moved.guest.name} (${moved.reg.name}'s guest)`,
+      uid: moved.reg.uid, actor: 'admin'
+    });
+  } catch (e) {
+    showToast('Could not save the new order. ' + (e.code === 'permission-denied' ? 'Permission denied — check Firestore rules.' : 'Try again.'), true);
+  }
+}
+
+// Drag-and-drop for the order handles (delegated, so it survives re-renders).
+(function setupRosterDrag() {
+  let drag = null;
+  const clear = () => document.querySelectorAll('tr.drop-over').forEach(t => t.classList.remove('drop-over', 'drop-below'));
+  document.addEventListener('dragstart', e => {
+    const h = e.target.closest?.('.drag-handle');
+    if (!h) return;
+    const tr = h.closest('tr');
+    drag = { group: h.dataset.drag, key: h.dataset.key, from: parseInt(tr?.dataset.dropindex, 10) };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', h.dataset.key);
+  });
+  document.addEventListener('dragover', e => {
+    if (!drag) return;
+    const tr = e.target.closest?.('tr[data-dropgroup]');
+    if (!tr || tr.dataset.dropgroup !== drag.group) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    clear();
+    tr.classList.add('drop-over');
+    tr.classList.toggle('drop-below', parseInt(tr.dataset.dropindex, 10) > drag.from);
+  });
+  document.addEventListener('drop', e => {
+    if (!drag) return;
+    const d = drag; drag = null; clear();
+    const tr = e.target.closest?.('tr[data-dropgroup]');
+    if (!tr || tr.dataset.dropgroup !== d.group) return;
+    e.preventDefault();
+    const eventId = document.getElementById('rosterSelect')?.value;
+    const to = parseInt(tr.dataset.dropindex, 10);
+    if (!eventId || isNaN(to)) return;
+    (d.group === 'main' ? adminMoveMain : adminMoveWait)(eventId, d.key, to);
+  });
+  document.addEventListener('dragend', () => { drag = null; clear(); });
+})();
 
 async function adminEditManualName(regId, eventId) {
   const allRegs = regsCache[eventId] || [];
@@ -4559,7 +4769,9 @@ const ACTIVITY_TYPE_META = {
   guest_add_waitlist:   { icon: '⏳', label: 'Added a guest (waitlisted)' },
   guest_remove:         { icon: '🚪', label: 'Removed a guest' },
   admin_remove_guest:   { icon: '🗑️', label: 'Removed a guest by admin' },
-  guests_promoted:      { icon: '⬆️', label: 'Guests promoted from waitlist' }
+  guests_promoted:      { icon: '⬆️', label: 'Guests promoted from waitlist' },
+  admin_reorder:        { icon: '↕️', label: 'Moved on player list by admin' },
+  admin_reorder_waitlist:{ icon: '↕️', label: 'Moved on waitlist by admin' }
 };
 
 function loadActivityLog() {
@@ -5424,7 +5636,8 @@ Object.assign(window, {
   openManualGroupBuilder, cancelManualGroupBuilder, createManualGroup, removeManualGroup,
   removeRegFromTeam, removeGuestFromTeam, restoreNoShowReg, restoreNoShowGuest,
   loadActivityLog, renderActivityLog, openActivityLogModal, openEventReportsModal, goToSkillLevelSetting, requestPasswordReset,
-  adminRemoveWaitlistedGuest, removePendingGuestFromSignup
+  adminRemoveWaitlistedGuest, removePendingGuestFromSignup,
+  adminToggleWaitGuestPayment, adminToggleWaitGuestNeedsPay, adminMoveMain, adminMoveWait
 });
 </script>
 
