@@ -308,6 +308,38 @@
     .roster-table th, .roster-table td { padding: 9px 10px; font-size: 13px; }
   }
 
+  /* Admin roster on phones: turn each row into a compact card so the name is
+     visible without side-scrolling. Admin rows always have 10 cells, in this
+     order: 1 Order, 2 Paid, 3 Needs to Pay, 4 #, 5 Name, 6 Email, 7 Phone,
+     8 Payment, 9 Signed Up/Joined, 10 Action. */
+  @media (max-width: 640px) {
+    .roster-table.admin-roster { min-width: 0; display: block; }
+    .roster-table.admin-roster thead { display: none; }
+    .roster-table.admin-roster tbody { display: block; }
+    .roster-table.admin-roster tr {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px;
+      padding: 10px 12px; border-bottom: 1px solid rgba(30,58,122,.4);
+    }
+    .roster-table.admin-roster tr:last-child { border-bottom: none; }
+    .roster-table.admin-roster td { display: block; padding: 0 !important; border: 0 !important; font-size: 13px; }
+    .roster-table.admin-roster td:empty { display: none; }
+    /* line 1: # · name · remove */
+    .roster-table.admin-roster td:nth-child(4)  { order: 1; }
+    .roster-table.admin-roster td:nth-child(5)  { order: 2; flex: 1 1 calc(100% - 130px); min-width: 0; font-size: 16px; word-break: break-word; }
+    .roster-table.admin-roster td:nth-child(10) { order: 3; }
+    /* line 2: paid · owes · move */
+    .roster-table.admin-roster td:nth-child(2)  { order: 4; }
+    .roster-table.admin-roster td:nth-child(3)  { order: 5; }
+    .roster-table.admin-roster td:nth-child(1)  { order: 6; margin-left: auto; }
+    /* line 3+: payment method, email, phone */
+    .roster-table.admin-roster td:nth-child(8)  { order: 7; flex-basis: 100%; }
+    .roster-table.admin-roster td:nth-child(6)  { order: 8; flex-basis: 100%; font-size: 12px; word-break: break-all; }
+    .roster-table.admin-roster td:nth-child(7)  { order: 9; flex-basis: 100%; font-size: 12px; }
+    .roster-table.admin-roster td:nth-child(9)  { display: none; }
+    .roster-table.admin-roster .drag-handle { display: none; } /* touch: use the arrows */
+    .roster-table.admin-roster .move-btn { padding: 5px 11px !important; font-size: 13px !important; }
+  }
+
   .form-group { margin-bottom: 18px; }
   .form-group label {
     display: block;
@@ -2997,7 +3029,7 @@ async function renderRoster() {
         <span style="font-weight:700;color:var(--gold)">⏳ Waitlist (${waitQueue.length})</span>
         <span style="font-size:13px;color:var(--muted)">In order — first up when a spot opens${isAdmin ? ' · drag ⠿ or use ▲▼ to rearrange' : ''}</span>
       </div>
-      <div class="roster-table-wrap"><table class="roster-table">
+      <div class="roster-table-wrap"><table class="roster-table${isAdmin ? ' admin-roster' : ''}">
         <thead><tr>
           ${isAdmin ? '<th>Order</th>' : ''}
           ${isAdmin ? '<th>Paid</th>' : ''}
@@ -3031,7 +3063,7 @@ async function renderRoster() {
       </div>
       <div id="squadsPanel"></div>
       ${isAdmin && rosterSortAlpha ? `<div style="padding:7px 20px;background:rgba(255,193,7,.07);border-bottom:1px solid rgba(255,193,7,.25);font-size:12px;color:var(--gold)">🔤 Sorted A–Z by first name — groups stay together for check-in</div>` : ''}
-      <div class="roster-table-wrap"><table class="roster-table">
+      <div class="roster-table-wrap"><table class="roster-table${isAdmin ? ' admin-roster' : ''}">
         <thead><tr>
           ${isAdmin ? '<th>Order</th>' : ''}
           ${isAdmin ? '<th>Paid</th>' : ''}
