@@ -309,9 +309,9 @@
   }
 
   /* Admin roster on phones: turn each row into a compact card so the name is
-     visible without side-scrolling. Admin rows always have 10 cells, in this
-     order: 1 Order, 2 Paid, 3 Needs to Pay, 4 #, 5 Name, 6 Email, 7 Phone,
-     8 Payment, 9 Signed Up/Joined, 10 Action. */
+     visible without side-scrolling. Admin rows always have 8 cells, in this
+     order: 1 Order, 2 Paid, 3 Needs to Pay, 4 #, 5 Name, 6 Payment,
+     7 Signed Up/Joined, 8 Action. */
   @media (max-width: 640px) {
     .roster-table.admin-roster { min-width: 0; display: block; }
     .roster-table.admin-roster thead { display: none; }
@@ -326,16 +326,14 @@
     /* line 1: # · name · remove */
     .roster-table.admin-roster td:nth-child(4)  { order: 1; }
     .roster-table.admin-roster td:nth-child(5)  { order: 2; flex: 1 1 calc(100% - 130px); min-width: 0; font-size: 16px; word-break: break-word; }
-    .roster-table.admin-roster td:nth-child(10) { order: 3; }
+    .roster-table.admin-roster td:nth-child(8)  { order: 3; }
     /* line 2: paid · owes · move */
     .roster-table.admin-roster td:nth-child(2)  { order: 4; }
     .roster-table.admin-roster td:nth-child(3)  { order: 5; }
     .roster-table.admin-roster td:nth-child(1)  { order: 6; margin-left: auto; }
-    /* line 3+: payment method, email, phone */
-    .roster-table.admin-roster td:nth-child(8)  { order: 7; flex-basis: 100%; }
-    .roster-table.admin-roster td:nth-child(6)  { order: 8; flex-basis: 100%; font-size: 12px; word-break: break-all; }
-    .roster-table.admin-roster td:nth-child(7)  { order: 9; flex-basis: 100%; font-size: 12px; }
-    .roster-table.admin-roster td:nth-child(9)  { display: none; }
+    /* line 3: payment method */
+    .roster-table.admin-roster td:nth-child(6)  { order: 7; flex-basis: 100%; }
+    .roster-table.admin-roster td:nth-child(7)  { display: none; }
     /* The column headers are hidden on phones, and the "Owes" label is blank
        when unchecked, so give that checkbox a visible label. */
     .roster-table.admin-roster td:nth-child(3) span:empty::after { content: 'Owes?'; }
@@ -2912,8 +2910,6 @@ async function renderRoster() {
         ${needsPayCell}
         <td style="color:var(--muted)">${num++}</td>
         <td>${r.uid ? `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openPlayerProfile('${r.uid}')" title="View profile">${he(r.name)}</strong>` : `<strong style="cursor:pointer;color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,.2)" onclick="openManualPlayerProfile('${r.id}')" title="View profile">${he(r.name)}</strong>${isAdmin ? ` <button class="btn btn-outline btn-sm" style="padding:1px 7px;font-size:11px" onclick="event.stopPropagation();adminEditManualName('${r.id}','${eventId}')" title="Edit name">✏️</button>` : ''}`}</td>
-        ${isAdmin ? `<td style="color:var(--muted)">${he(contact.email) || '—'}</td>` : ''}
-        ${isAdmin ? `<td style="color:var(--muted)">${he(contact.phone) || '—'}</td>` : ''}
         ${isAdmin ? `<td>${payBadge}</td>` : ''}
         <td style="color:var(--muted);font-size:13px">${r.signedUpAt?.toDate ? r.signedUpAt.toDate().toLocaleDateString() : ''}</td>
         ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemove('${r.id}', '${eventId}', ${r.waitlisted ? 'true' : 'false'})">Remove</button></td>` : ''}
@@ -2947,8 +2943,6 @@ async function renderRoster() {
           <td style="color:var(--muted)">${num++}</td>
           <td style="padding-left:24px"><span style="color:var(--muted)">↳</span> <span style="color:var(--text);font-weight:600">${he(g.name)}</span> <span style="background:rgba(91,111,212,.18);color:var(--sky);border-radius:100px;padding:2px 9px;font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;vertical-align:middle">Guest</span>${isAdmin ? ` <button class="btn btn-outline btn-sm" style="padding:1px 7px;font-size:11px" onclick="adminEditGuestName('${r.id}','${eventId}',${gi})" title="Edit guest name">✏️</button>` : ''}</td>
           ${isAdmin ? '<td></td>' : ''}
-          ${isAdmin ? '<td></td>' : ''}
-          ${isAdmin ? '<td></td>' : ''}
           <td></td>
           ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemoveGuest('${r.id}', '${eventId}', ${gi})">Remove</button></td>` : ''}
         </tr>`;
@@ -2959,7 +2953,7 @@ async function renderRoster() {
           ${isAdmin ? '<td></td><td></td><td></td>' : ''}
           <td style="color:var(--muted)">—</td>
           <td style="padding-left:24px"><span style="color:var(--muted)">↳</span> <span style="color:var(--text);font-weight:600">${he(wg.name)}</span> <span class="waitlist-badge" style="font-size:11px;padding:2px 9px">Waitlisted Guest</span></td>
-          ${isAdmin ? '<td></td><td></td><td></td>' : ''}
+          ${isAdmin ? '<td></td>' : ''}
           <td></td>
           ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemoveWaitlistedGuest('${r.id}', '${eventId}', ${wgi})">Remove</button></td>` : ''}
         </tr>`;
@@ -3020,7 +3014,7 @@ async function renderRoster() {
           ${wgNeedsCell}
           <td style="color:var(--muted)">${waitNum++}</td>
           <td><span style="color:var(--text);font-weight:600">${he(wg.name)}</span> <span style="color:var(--muted);font-size:13px">(${leadName}'s Guest)</span></td>
-          ${isAdmin ? '<td></td><td></td><td></td>' : ''}
+          ${isAdmin ? '<td></td>' : ''}
           <td style="color:var(--muted);font-size:13px">${r.signedUpAt?.toDate ? r.signedUpAt.toDate().toLocaleDateString() : ''}</td>
           ${isAdmin ? `<td><button class="btn btn-danger btn-sm" onclick="adminRemoveWaitlistedGuest('${r.id}', '${eventId}', ${entry.idx})">Remove</button></td>` : ''}
         </tr>`;
@@ -3038,8 +3032,6 @@ async function renderRoster() {
           ${isAdmin ? '<th>Paid</th>' : ''}
           ${isAdmin ? '<th>Needs to Pay</th>' : ''}
           <th>#</th><th>Name</th>
-          ${isAdmin ? '<th>Email</th>' : ''}
-          ${isAdmin ? '<th>Phone</th>' : ''}
           ${isAdmin ? '<th>Payment</th>' : ''}
           <th>Joined</th>
           ${isAdmin ? '<th>Action</th>' : ''}
@@ -3072,8 +3064,6 @@ async function renderRoster() {
           ${isAdmin ? '<th>Paid</th>' : ''}
           ${isAdmin ? '<th>Needs to Pay</th>' : ''}
           <th>#</th><th>Name</th>
-          ${isAdmin ? '<th>Email</th>' : ''}
-          ${isAdmin ? '<th>Phone</th>' : ''}
           ${isAdmin ? '<th>Payment</th>' : ''}
           <th>Signed Up</th>
           ${isAdmin ? '<th>Action</th>' : ''}
