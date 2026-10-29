@@ -1222,7 +1222,7 @@
         <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--border)">
           <div>
             <div style="font-weight:700;font-size:15px;color:var(--text)">📊 Event Reports</div>
-            <div style="font-size:13px;color:var(--muted);margin-top:3px">Who paid, who owes, and who didn't show up, saved when you end an event from its roster. Only the 3 most recent reports are kept.</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:3px">Who paid, who owes, and who didn't show up, saved when you end an event from its roster. Reports are kept until you delete them.</div>
           </div>
           <button class="btn btn-outline btn-sm" style="flex-shrink:0" onclick="openEventReportsModal()">View Reports</button>
         </div>
@@ -3125,8 +3125,7 @@ async function saveAdminNotes(eventId, value) {
 // Admin-only snapshots of who paid, who owes, and who didn't show up for a
 // given session, taken from the current Paid / Needs to Pay checkbox state
 // at the moment the admin ends the event. Stored in a top-level
-// 'eventReports' collection, capped at the 3 most recent — older ones are
-// deleted whenever a new one is added, so this never grows unbounded.
+// 'eventReports' collection, kept until the admin deletes them.
 // Lives under Admin → Reports (see switchAdminTab).
 let eventReportsCache = null;
 
@@ -3135,7 +3134,7 @@ async function renderEventReportsPanel() {
   if (!panel) return;
   panel.innerHTML = '<div class="card" style="margin-top:12px;padding:14px 18px;color:var(--muted)">Loading reports…</div>';
   try {
-    const snap = await getDocs(query(collection(db, 'eventReports'), orderBy('endedAt', 'desc'), limit(3)));
+    const snap = await getDocs(query(collection(db, 'eventReports'), orderBy('endedAt', 'desc'), limit(100)));
     eventReportsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch (e) {
     panel.innerHTML = '<div class="card" style="margin-top:12px;padding:14px 18px;color:var(--danger)">Could not load reports.</div>';
@@ -3150,6 +3149,27 @@ async function renderEventReportsPanel() {
       <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:4px">${title} (${names.length})</div>
       ${names.length ? `<div style="font-size:13px;color:var(--text);line-height:1.6">${names.map(n => he(n)).join('<br>')}</div>` : '<div style="font-size:12px;color:var(--muted)">—</div>'}
     </div>`;
+  const statusTag = (paid, owes) => paid
+    ? '<span style="color:var(--success);font-weight:700">✓ Paid</span>'
+    : owes
+    ? '<span style="color:var(--gold);font-weight:700">Owes</span>'
+    : '<span style="color:var(--danger);font-weight:700">No show</span>';
+  const rosterBlock = (roster) => {
+    if (!roster || !roster.length) return '';
+    let total = 0;
+    const rows = roster.map(p => {
+      total += 1 + (p.guests?.length || 0);
+      const guestRows = (p.guests || []).map(g =>
+        `<div style="padding:2px 0 2px 16px;color:var(--muted)">↳ ${he(g.name)} (guest) — ${statusTag(g.paid, g.owes)}</div>`
+      ).join('');
+      return `<div style="padding:3px 0">${he(p.name)} — ${statusTag(p.paid, p.owes)}</div>${guestRows}`;
+    }).join('');
+    return `
+      <details style="margin-top:12px">
+        <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--sky)">Full player list (${total})</summary>
+        <div style="margin-top:8px;font-size:13px;line-height:1.5">${rows}</div>
+      </details>`;
+  };
   panel.innerHTML = eventReportsCache.map(r => `
     <div class="card" style="margin-top:12px;padding:14px 18px">
       <div class="report-header">
@@ -3161,6 +3181,7 @@ async function renderEventReportsPanel() {
         ${listBlock('Owes', 'var(--gold)', r.owes || [])}
         ${listBlock('Didn\u2019t Show', 'var(--danger)', r.noShow || [])}
       </div>
+      ${rosterBlock(r.roster)}
     </div>`).join('');
 }
 
@@ -3181,7 +3202,7 @@ async function adminEndEvent(eventId) {
   const allRegs = regsCache[eventId] || [];
   const mainRegs = allRegs.filter(r => !r.waitlisted);
   if (!mainRegs.length) { showToast('No confirmed players on this roster to record.', true); return; }
-  if (!confirm(`End "${ev?.name || 'this event'}"? This removes it from the schedule (yours included) and saves a report of who paid, who owes, and who didn't show up (based on the current Paid / Needs to Pay checkboxes) under Admin \u2192 Reports. Only the 3 most recent reports are kept — the oldest is deleted automatically. This won't touch the live roster, and you can still find, reopen, or permanently delete the event later from Admin \u2192 Events.`)) return;
+  if (!confirm(`End "${ev?.name || 'this event'}"? This removes it from the schedule (yours included) and saves a report of who paid, who owes, and who didn't show up (based on the current Paid / Needs to Pay checkboxes) under Admin \u2192 Reports. Reports are kept until you delete them, along with the full player list. This won't touch the live roster, and you can still find, reopen, or permanently delete the event later from Admin \u2192 Events.`)) return;
 
   const paid = [];
   const owes = [];
@@ -3200,18 +3221,17 @@ async function adminEndEvent(eventId) {
     }
   }
 
+  const roster = mainRegs.map(r => ({
+    name: r.name,
+    paid: !!rosterContactCache[r.id]?.paymentReceived,
+    owes: !!rosterContactCache[r.id]?.needsToPay,
+    guests: (r.guests || []).map(g => ({ name: g.name, paid: !!g.paymentReceived, owes: !!g.needsToPay }))
+  }));
+
   try {
-    // Trim first so we never exceed 3: keep the newest 2 existing reports,
-    // delete the rest, then add this one — leaving exactly 3 (or fewer).
-    const existingSnap = await getDocs(query(collection(db, 'eventReports'), orderBy('endedAt', 'asc')));
-    const existingDocs = existingSnap.docs;
-    if (existingDocs.length >= 3) {
-      const toDelete = existingDocs.slice(0, existingDocs.length - 2);
-      await Promise.all(toDelete.map(d => deleteDoc(d.ref)));
-    }
     await addDoc(collection(db, 'eventReports'), {
       eventId, eventName: ev?.name || 'Event', eventDate: ev?.date || '',
-      endedAt: serverTimestamp(), paid, owes, noShow
+      endedAt: serverTimestamp(), paid, owes, noShow, roster
     });
     // Pull the event off the public schedule immediately — see hasEventEnded().
     await setDoc(doc(db, 'events', eventId), { manuallyEnded: true }, { merge: true });
@@ -5690,7 +5710,7 @@ Object.assign(window, {
   <div class="modal" style="position:relative;width:min(640px, 100%)">
     <button class="modal-close" onclick="closeModal('eventReportsModal')">✕</button>
     <h2>Event Reports</h2>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Who paid, who owes, and who didn't show up, saved when you end an event from its roster. Only the 3 most recent reports are kept.</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Who paid, who owes, and who didn't show up, saved when you end an event from its roster. Reports are kept until you delete them.</div>
     <div id="adminReportsList"></div>
   </div>
 </div>
