@@ -2950,7 +2950,7 @@ async function renderRoster() {
       }
       for (let wgi = 0; !opts.noPending && wgi < (r.waitlistedGuests || []).length; wgi++) {
         const wg = r.waitlistedGuests[wgi];
-        rows += `<tr class="guest-tr" style="background:rgba(255,193,7,.05);border-left:3px solid var(--gold)">
+        rows += `<tr class="guest-tr">
           ${isAdmin ? '<td></td><td></td><td></td>' : ''}
           <td style="color:var(--muted)">—</td>
           <td style="padding-left:24px"><span style="color:var(--muted)">↳</span> <span style="color:var(--text);font-weight:600">${he(wg.name)}</span> <span class="waitlist-badge" style="font-size:11px;padding:2px 9px">Waitlisted Guest</span></td>
@@ -3009,7 +3009,7 @@ async function renderRoster() {
             <span id="wgnpl-${r.id}-${entry.idx}" style="font-size:12px;font-weight:700;color:${wgNeeds ? 'var(--gold)' : 'var(--muted)'}">${wgNeeds ? 'Owes' : ''}</span>
           </label>
         </td>` : '';
-        waitRows += `<tr class="guest-tr" ${isAdmin ? `data-dropgroup="wait" data-dropindex="${qi}"` : ''} style="background:rgba(255,193,7,.05);border-left:3px solid var(--gold)">
+        waitRows += `<tr class="guest-tr" ${isAdmin ? `data-dropgroup="wait" data-dropindex="${qi}"` : ''}>
           ${isAdmin ? moveCellHtml('wait', wgKey, qi, waitQueue.length) : ''}
           ${wgPaidCell}
           ${wgNeedsCell}
