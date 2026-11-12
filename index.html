@@ -1367,7 +1367,8 @@
 
     <!-- PAYMENT METHOD -->
     <div style="font-weight:700;font-size:15px;margin-bottom:12px">How will you pay?</div>
-    <div class="payment-options">
+    <div id="waitlistPayNote" style="display:none;font-size:13px;color:var(--muted);background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.3);border-radius:8px;padding:10px 12px;line-height:1.5;margin-bottom:12px">⏳ This event is full, so waitlist spots are <strong style="color:var(--gold)">pay at the door only</strong>. No payment is needed now. If a spot opens up, you'll be moved onto the roster.</div>
+    <div class="payment-options" id="paymentOptionsGrid">
       <div class="payment-option" id="payOptNow" onclick="selectPayment('now')">
         <div class="pay-icon">📱</div>
         <div class="pay-label">Pay Now</div>
@@ -2350,10 +2351,15 @@ function openEventSignup(eventId) {
   if (confirmBtn) confirmBtn.textContent = isFullNow ? '⏳ Join Waitlist' : '✅ Confirm My Spot';
   document.getElementById('payOptNow').classList.remove('selected');
   document.getElementById('payOptDoor').classList.remove('selected');
+  // Waitlist sign-ups can only pay at the door
+  document.getElementById('payOptNow').style.display = isFullNow ? 'none' : '';
+  document.getElementById('paymentOptionsGrid').style.gridTemplateColumns = isFullNow ? '1fr' : '';
+  document.getElementById('waitlistPayNote').style.display = isFullNow ? 'block' : 'none';
   document.getElementById('checkAge').checked = false;
   document.getElementById('checkWaiver').checked = false;
   document.getElementById('squadRows').innerHTML = '';
   document.getElementById('squadNameInput').value = '';
+  if (isFullNow) selectPayment('door');
 
   openModal('eventSignupModal');
 }
@@ -2456,6 +2462,8 @@ async function confirmSignup() {
   const taken = existing.filter(r => !r.waitlisted).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
   const available = Math.max(0, ev.spots - taken);
   const isFull = available <= 0;
+  // Waitlist sign-ups are pay-at-the-door only (enforced here too, not just in the UI)
+  if (isFull) selectedPayment = 'door';
 
   // Registrant takes a spot first, then guests in order until spots run out.
   // Anyone who doesn't fit is saved as a pending (waitlisted) guest.
