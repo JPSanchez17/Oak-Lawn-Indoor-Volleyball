@@ -1887,6 +1887,7 @@ function startPublicListeners() {
   setInterval(() => {
     renderSchedule();
     if (currentUser?.isAdmin) renderAdminEvents();
+    reconcileWaitlists();
   }, 30000);
   unsubEvents = onSnapshot(query(collection(db, 'events'), orderBy('date')), (snap) => {
     eventsLoaded = true;
@@ -1898,6 +1899,7 @@ function startPublicListeners() {
     renderNews();
     if (currentUser?.isAdmin) renderAdminEvents();
     populateRosterSelect();
+    if (!snap.metadata.fromCache) reconcileWaitlists(); // e.g. spot cap was raised
   }, (err) => { eventsLoaded = true; renderSchedule(); if (currentUser?.isAdmin) renderAdminEvents(); console.error('events listener error', err); });
 
   unsubRegistrations = onSnapshot(collection(db, 'registrations'), (snap) => {
@@ -1914,6 +1916,7 @@ function startPublicListeners() {
     if (openGroupModal && openGroupModal.classList.contains('open') && currentManageGroupEventId) {
       openManageGroup(currentManageGroupEventId);
     }
+    if (!snap.metadata.fromCache) reconcileWaitlists(); // a spot opened and nobody was promoted
   }, (err) => console.error('registrations listener error', err));
 }
 
@@ -2083,8 +2086,10 @@ async function submitEditEvent() {
 
   try {
     await setDoc(doc(db, 'events', eventId), { name, date, startTime, endTime, location, spots, cost, courts, teamSize, courtInfo }, { merge: true });
+    // A higher cap means open spots: move waitlisted players up to fill them.
+    const moved = await promoteFromWaitlist(eventId);
     closeModal('editEventModal');
-    showToast('Event updated! ✅');
+    showToast(moved > 0 ? `Event updated! ${moved} player${moved > 1 ? 's' : ''} moved up from the waitlist. ✅` : 'Event updated! ✅');
   } catch (e) {
     console.error('submitEditEvent error:', e);
     showToast('Could not update event.', true);
@@ -2746,20 +2751,15 @@ function buildWaitQueue(regs) {
   return entries;
 }
 
-async function promoteFromWaitlist(eventId) {
-  const ev = eventsCache.find(e => e.id === eventId);
-  if (!ev) return;
-
-  const snap = await getDocs(query(collection(db, 'registrations'), where('eventId', '==', eventId)));
-  const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
+// ---- Waitlist promotion ----
+// Pure planner: given every registration for an event and its capacity,
+// decide who moves up. A promoted lead does NOT pull their guests along;
+// each guest waits for their own turn, then is recombined into the lead's
+// confirmed guest list when they get a spot.
+function planWaitlistPromotion(all, spots) {
   const taken = all.filter(r => !r.waitlisted).reduce((s, r) => s + 1 + (r.guests?.length || 0), 0);
-  let available = ev.spots - taken;
-  if (available <= 0) return;
-
-  // Walk the queue one person at a time. A promoted lead does NOT pull their
-  // guests along; each guest waits for their own turn, then is recombined
-  // into the lead's confirmed guest list when they get a spot.
+  let available = spots - taken;
+  if (available <= 0) return [];
   const changes = {};
   for (const entry of buildWaitQueue(all)) {
     if (available <= 0) break;
@@ -2778,21 +2778,81 @@ async function promoteFromWaitlist(eventId) {
       c.promotedGuests.push(entry.guest.name); available -= 1;
     }
   }
+  return Object.values(changes).filter(c => c.promotedLead || c.promotedGuests.length > 0);
+}
 
-  for (const c of Object.values(changes)) {
-    if (!c.promotedLead && c.promotedGuests.length === 0) continue;
-    const r = c.reg;
-    try {
-      await updateDoc(doc(db, 'registrations', r.id), {
-        waitlisted: c.waitlisted,
-        guests: c.guests,
-        waitlistedGuests: c.pending
-      });
-      if (c.promotedLead) logActivity(eventId, 'promoted', { name: r.name, uid: r.uid, actor: 'system' });
-      if (c.promotedGuests.length) logActivity(eventId, 'guests_promoted', { name: r.name, uid: r.uid, actor: 'system', guests: c.promotedGuests });
-    } catch (e) {
-      console.warn('Skipping stale waitlist entry (likely already canceled):', r.id, e);
+// Runs one promotion pass for an event and returns how many people moved up.
+// Never throws. Capacity is read fresh from the event doc (so a just-saved
+// cap increase counts), and the writes happen in a single transaction: if
+// two browsers try at once, Firestore retries the loser against the new data,
+// so nobody gets promoted twice and the event can't be oversold.
+async function runPromotion(eventId) {
+  if (!currentUser) return 0;
+  try {
+    const evSnap = await getDoc(doc(db, 'events', eventId));
+    if (!evSnap.exists()) return 0;
+    const spots = Number(evSnap.data().spots) || 0;
+
+    const regsSnap = await getDocs(query(collection(db, 'registrations'), where('eventId', '==', eventId)));
+    const firstLook = regsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (planWaitlistPromotion(firstLook, spots).length === 0) return 0;
+
+    const applied = await runTransaction(db, async (tx) => {
+      const live = [];
+      for (const d of regsSnap.docs) {
+        const s = await tx.get(d.ref);
+        if (s.exists()) live.push({ id: s.id, ...s.data() });
+      }
+      const plan = planWaitlistPromotion(live, spots);
+      for (const c of plan) {
+        tx.update(doc(db, 'registrations', c.reg.id), {
+          waitlisted: c.waitlisted,
+          guests: c.guests,
+          waitlistedGuests: c.pending
+        });
+      }
+      return plan;
+    });
+
+    let moved = 0;
+    for (const c of applied) {
+      const r = c.reg;
+      if (c.promotedLead) { moved += 1; logActivity(eventId, 'promoted', { name: r.name, uid: r.uid, actor: 'system' }); }
+      if (c.promotedGuests.length) { moved += c.promotedGuests.length; logActivity(eventId, 'guests_promoted', { name: r.name, uid: r.uid, actor: 'system', guests: c.promotedGuests }); }
     }
+    return moved;
+  } catch (e) {
+    console.error('promoteFromWaitlist failed:', e);
+    if (currentUser?.isAdmin) showToast('Waitlist auto-promote failed: ' + (e.code || e.message || 'unknown error'), true);
+    return 0;
+  }
+}
+
+// Promotions for the same event run one after another in this browser.
+const promoteChains = {};
+function promoteFromWaitlist(eventId) {
+  const run = (promoteChains[eventId] || Promise.resolve()).then(() => runPromotion(eventId));
+  promoteChains[eventId] = run;
+  return run;
+}
+
+// Safety net. Promotion used to depend entirely on the browser of whoever
+// cancelled: if that tab closed, lost signal or errored, the freed spot sat
+// open. Now any signed-in browser that sees an upcoming event with an open
+// spot and someone waiting (after a registrations/events update, or on the
+// 30s tick) finishes the job. It's idempotent, so extra callers are no-ops.
+const reconcileLast = {};
+function reconcileWaitlists() {
+  if (!currentUser || !eventsLoaded) return;
+  const now = Date.now();
+  for (const ev of eventsCache) {
+    if (hasEventEnded(ev)) continue;
+    const regs = regsCache[ev.id] || [];
+    if (!regs.length) continue;
+    if (planWaitlistPromotion(regs, Number(ev.spots) || 0).length === 0) continue;
+    if (now - (reconcileLast[ev.id] || 0) < 15000) continue;
+    reconcileLast[ev.id] = now;
+    promoteFromWaitlist(ev.id);
   }
 }
 
