@@ -338,6 +338,7 @@
     .cal-chip { font-size: 10px; line-height: 1.15; padding: 2px 1px; width: 100%; text-align: center;
                 white-space: normal; overflow: visible; word-break: keep-all; }
     .cal-t { display: block; }
+    .cal-range { white-space: nowrap; }
     .cal-chip .cal-chip-name { display: none; }
     .cal-title { font-size: 20px; }
     .sched-toolbar { justify-content: center; }
@@ -2425,6 +2426,10 @@ function calTimeHtml(ev, prefix = '') {
   };
   const a = parse(ev.startTime), b = parse(ev.endTime);
   if (a && b) {
+    // Whole-hour ranges ("6–9") are short enough to stay together on one line.
+    if (a.ap === b.ap && !a.txt.includes(':') && !b.txt.includes(':')) {
+      return `<span class="cal-t cal-range">${prefix}${a.txt}–${b.txt}</span><span class="cal-t"> ${a.ap}</span>`;
+    }
     if (a.ap === b.ap) {
       return `<span class="cal-t">${prefix}${a.txt}</span><span class="cal-t">–${b.txt}</span><span class="cal-t"> ${a.ap}</span>`;
     }
