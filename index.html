@@ -327,8 +327,10 @@
   @media (max-width: 600px) {
     .cal-wrap { padding: 12px 8px; }
     .cal-grid { gap: 3px; }
-    .cal-cell { min-height: 58px; padding: 4px 3px; align-items: center; }
-    .cal-chip { font-size: 9.5px; padding: 1px 3px; width: 100%; text-align: center; }
+    .cal-cell { min-height: 62px; padding: 4px 2px; align-items: center; border-width: 1.5px; overflow: visible; }
+    /* Let the time wrap onto a second line ("7:30" / "PM") instead of being cut off */
+    .cal-chip { font-size: 10px; line-height: 1.15; padding: 2px 2px; width: 100%; text-align: center;
+                white-space: normal; overflow: visible; text-overflow: clip; word-break: keep-all; }
     .cal-chip .cal-chip-name { display: none; }
     .cal-title { font-size: 20px; }
     .sched-toolbar { justify-content: center; }
