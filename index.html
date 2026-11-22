@@ -276,6 +276,64 @@
   .spots-fill { height: 100%; background: linear-gradient(90deg, var(--purple), var(--fire), var(--gold)); border-radius: 100px; transition: width .5s; }
   .event-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
 
+
+  /* ---------- Schedule: List / Calendar toggle + month grid ---------- */
+  .sched-toolbar { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+  .view-toggle { display: inline-flex; background: var(--card); border: 1px solid var(--border); border-radius: 100px; padding: 3px; gap: 2px; }
+  .view-toggle button {
+    background: transparent; border: none; color: var(--muted); cursor: pointer;
+    font-family: 'Barlow', sans-serif; font-weight: 600; font-size: 13px;
+    padding: 7px 16px; border-radius: 100px; transition: background .2s, color .2s;
+  }
+  .view-toggle button:hover { color: var(--text); }
+  .view-toggle button.active { background: linear-gradient(135deg, var(--fire), var(--gold)); color: #000; }
+
+  #eventsList { scroll-margin-top: 90px; }
+  .cal-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+  .cal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+  .cal-title { font-family: 'Barlow Condensed', sans-serif; font-weight: 900; font-size: 24px; text-transform: uppercase; letter-spacing: 1px; color: var(--gold); text-align: center; flex: 1; }
+  .cal-nav { display: flex; gap: 6px; align-items: center; }
+  .cal-nav button {
+    background: transparent; border: 1px solid var(--border); color: var(--text); cursor: pointer;
+    border-radius: 8px; min-width: 36px; height: 36px; font-size: 16px; font-family: 'Barlow', sans-serif; font-weight: 600; padding: 0 10px;
+  }
+  .cal-nav button:hover { border-color: var(--sky); color: var(--sky); }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .cal-dow { text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); padding: 4px 0 6px; font-weight: 600; }
+  .cal-blank { min-height: 1px; }
+  .cal-cell {
+    background: rgba(255,255,255,.03); border: 1px solid transparent; border-radius: 8px;
+    min-height: 86px; padding: 6px; text-align: left; cursor: pointer; color: var(--text);
+    font-family: 'Barlow', sans-serif; display: flex; flex-direction: column; gap: 3px; overflow: hidden;
+    transition: border-color .15s, background .15s;
+  }
+  .cal-cell:hover { border-color: var(--fire); }
+  .cal-cell.has-events { background: rgba(255,98,0,.07); border-color: rgba(255,98,0,.25); }
+  .cal-cell.today .cal-daynum { background: var(--fire); color: #000; }
+  .cal-cell.selected { border-color: var(--gold); background: rgba(255,193,7,.1); box-shadow: 0 0 0 1px var(--gold) inset; }
+  .cal-daynum { font-size: 13px; font-weight: 700; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; flex-shrink: 0; }
+  .cal-chip {
+    display: block; font-size: 11px; font-weight: 600; line-height: 1.25; padding: 2px 5px; border-radius: 5px;
+    background: rgba(147,51,234,.25); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cal-chip.full { background: rgba(239,68,68,.22); }
+  .cal-chip.mine { background: rgba(34,197,94,.22); }
+  .cal-chip.ended { opacity: .5; }
+  .cal-more { font-size: 10px; color: var(--muted); font-weight: 600; padding-left: 2px; }
+  .cal-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .cal-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .cal-hint { text-align: center; color: var(--muted); font-size: 14px; padding: 18px 0 6px; }
+  .cal-selected-label { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 18px; letter-spacing: .5px; text-transform: uppercase; color: var(--text); margin: 4px 0 12px; }
+  @media (max-width: 600px) {
+    .cal-wrap { padding: 12px 8px; }
+    .cal-grid { gap: 3px; }
+    .cal-cell { min-height: 58px; padding: 4px 3px; align-items: center; }
+    .cal-chip { font-size: 9.5px; padding: 1px 3px; width: 100%; text-align: center; }
+    .cal-chip .cal-chip-name { display: none; }
+    .cal-title { font-size: 20px; }
+    .sched-toolbar { justify-content: center; }
+  }
+
   .roster-event-select {
     background: var(--card);
     border: 1px solid var(--border);
@@ -976,6 +1034,13 @@
   <div class="container">
     <div class="section-title">Open Gym Schedule</div>
     <div class="section-sub">Sign up for a session — spots are limited!</div>
+    <div class="sched-toolbar">
+      <div class="view-toggle" role="group" aria-label="Schedule view">
+        <button type="button" id="schedViewList" class="active" onclick="setScheduleView('list')">☰ List</button>
+        <button type="button" id="schedViewCal" onclick="setScheduleView('calendar')">📅 Calendar</button>
+      </div>
+    </div>
+    <div id="eventsCalendar" style="display:none"></div>
     <div id="eventsList"></div>
   </div>
 </div>
@@ -1486,6 +1551,12 @@ let currentManageGroupEventId = null;
 let adminAddPlayerEventId = null;
 let editingEventId = null;
 let rosterSortAlpha = localStorage.getItem('adminRosterSortAlpha') === 'true';
+// Schedule tab view state (List / Calendar)
+let scheduleView = 'list';
+try { if (localStorage.getItem('scheduleView') === 'calendar') scheduleView = 'calendar'; } catch (e) {}
+let calMonth = null;        // Date set to the 1st of the month being shown
+let calSelectedDate = null; // 'YYYY-MM-DD' of the tapped day
+
 let rosterContactCache = {};     // contactByRegId — persists across sort toggles
 let rosterContactEventId = null; // which event the contact cache belongs to
 let unsubEvents = null;
@@ -2183,12 +2254,7 @@ function renderSchedule() {
   const el = document.getElementById('eventsList');
   if (!el) return;
 
-  if (!eventsLoaded) {
-    el.innerHTML = `<div class="empty"><div class="empty-icon">⏳</div><p>Loading schedule…</p></div>`;
-  } else if (!events.length) {
-    el.innerHTML = `<div class="empty"><div class="empty-icon">📅</div><p>No open gyms scheduled yet. Check back soon!</p></div>`;
-  } else {
-    el.innerHTML = events.map(ev => {
+  const buildEventCard = (ev) => {
       const d = new Date(ev.date + 'T12:00:00');
       const weekday = d.toLocaleString('default', { weekday: 'short' }).toUpperCase();
       const month = d.toLocaleString('default', { month: 'short' }).toUpperCase();
@@ -2269,7 +2335,22 @@ function renderSchedule() {
         </div>
         <div class="event-actions">${actionBtn}</div>
       </div>`;
-    }).join('');
+  };
+
+  // Keep the List / Calendar toggle in sync with the chosen view.
+  document.getElementById('schedViewList')?.classList.toggle('active', scheduleView === 'list');
+  document.getElementById('schedViewCal')?.classList.toggle('active', scheduleView === 'calendar');
+  const calEl = document.getElementById('eventsCalendar');
+  if (calEl) calEl.style.display = (scheduleView === 'calendar' && eventsLoaded) ? '' : 'none';
+
+  if (!eventsLoaded) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">⏳</div><p>Loading schedule…</p></div>`;
+  } else if (scheduleView === 'calendar') {
+    renderScheduleCalendar(events, buildEventCard);
+  } else if (!events.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📅</div><p>No open gyms scheduled yet. Check back soon!</p></div>`;
+  } else {
+    el.innerHTML = events.map(buildEventCard).join('');
   }
 
   const next = events[0];
@@ -2278,6 +2359,127 @@ function renderSchedule() {
     teaser.textContent = next
       ? `${next.name} on ${new Date(next.date + 'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}`
       : 'check the schedule';
+  }
+}
+
+
+// ======================== SCHEDULE: CALENDAR VIEW ========================
+// Optional month-grid alternative to the list. It reads the same `events`
+// array renderSchedule() already filtered (so ended/hidden events behave
+// identically) and reuses the same event card for whichever day is tapped,
+// so signing up, waitlist, guests, etc. all work exactly as in the list.
+
+function setScheduleView(view) {
+  scheduleView = view === 'calendar' ? 'calendar' : 'list';
+  try { localStorage.setItem('scheduleView', scheduleView); } catch (e) {}
+  renderSchedule();
+}
+
+function calShiftMonth(delta) {
+  calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + delta, 1);
+  renderSchedule();
+}
+
+function calGoToday() {
+  const now = new Date();
+  calMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  calSelectedDate = getLocalDateStr(now);
+  renderSchedule();
+}
+
+function calSelectDay(dateStr) {
+  calSelectedDate = dateStr;
+  renderSchedule();
+  // Bring the day's sign-up cards into view (matters most on phones).
+  document.getElementById('eventsList')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function calShortTime(t) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(t || '');
+  if (!m) return '';
+  let h = parseInt(m[1], 10);
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return m[2] === '00' ? `${h} ${ap}` : `${h}:${m[2]} ${ap}`;
+}
+
+function calEsc(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+function renderScheduleCalendar(events, buildEventCard) {
+  const calEl = document.getElementById('eventsCalendar');
+  const listEl = document.getElementById('eventsList');
+  if (!calEl || !listEl) return;
+
+  // First time in calendar view: jump to the next upcoming session.
+  if (!calMonth) {
+    const first = events[0];
+    const base = first?.date ? new Date(first.date + 'T12:00:00') : new Date();
+    calMonth = new Date(base.getFullYear(), base.getMonth(), 1);
+    if (first?.date && !calSelectedDate) calSelectedDate = first.date;
+  }
+
+  const year = calMonth.getFullYear();
+  const month = calMonth.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const leading = new Date(year, month, 1).getDay();
+  const todayStr = getLocalDateStr();
+  const monthLabel = calMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+  const byDate = {};
+  events.forEach(ev => { if (ev.date) (byDate[ev.date] = byDate[ev.date] || []).push(ev); });
+  Object.values(byDate).forEach(list => list.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || '')));
+
+  let cells = '';
+  for (let i = 0; i < leading; i++) cells += '<div class="cal-blank"></div>';
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dayEvents = byDate[dateStr] || [];
+    const MAX_CHIPS = 2;
+    const chips = dayEvents.slice(0, MAX_CHIPS).map(ev => {
+      const regs = regsCache[ev.id] || [];
+      const main = regs.filter(r => !r.waitlisted);
+      const taken = main.reduce((sum, r) => sum + 1 + (r.guests?.length || 0), 0);
+      const mine = !!(currentUser && regs.some(r => r.uid === currentUser.uid));
+      const cls = [mine ? 'mine' : (taken >= ev.spots ? 'full' : ''), hasEventEnded(ev) ? 'ended' : ''].join(' ').trim();
+      const time = calShortTime(ev.startTime);
+      return `<span class="cal-chip ${cls}" title="${calEsc(ev.name)}">${mine ? '✓ ' : ''}${time}<span class="cal-chip-name"> ${calEsc(ev.name)}</span></span>`;
+    }).join('');
+    const more = dayEvents.length > MAX_CHIPS ? `<span class="cal-more">+${dayEvents.length - MAX_CHIPS} more</span>` : '';
+    const cls = ['cal-cell', dayEvents.length ? 'has-events' : '', dateStr === todayStr ? 'today' : '', dateStr === calSelectedDate ? 'selected' : ''].join(' ').trim();
+    const label = `${new Date(year, month, day).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}${dayEvents.length ? `, ${dayEvents.length} session${dayEvents.length > 1 ? 's' : ''}` : ''}`;
+    cells += `<button type="button" class="${cls}" onclick="calSelectDay('${dateStr}')" aria-label="${label}"><span class="cal-daynum">${day}</span>${chips}${more}</button>`;
+  }
+
+  const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => `<div class="cal-dow">${d}</div>`).join('');
+  calEl.innerHTML = `
+    <div class="cal-wrap">
+      <div class="cal-head">
+        <div class="cal-nav"><button type="button" onclick="calShiftMonth(-1)" aria-label="Previous month">‹</button></div>
+        <div class="cal-title">${monthLabel}</div>
+        <div class="cal-nav">
+          <button type="button" onclick="calGoToday()">Today</button>
+          <button type="button" onclick="calShiftMonth(1)" aria-label="Next month">›</button>
+        </div>
+      </div>
+      <div class="cal-grid">${dows}${cells}</div>
+      <div class="cal-legend">
+        <span><i style="background:rgba(147,51,234,.5)"></i>Open</span>
+        <span><i style="background:rgba(239,68,68,.5)"></i>Full (waitlist)</span>
+        <span><i style="background:rgba(34,197,94,.5)"></i>You're in</span>
+      </div>
+    </div>`;
+
+  // Cards for the tapped day go underneath the grid.
+  const selEvents = calSelectedDate ? (byDate[calSelectedDate] || []) : [];
+  if (!calSelectedDate) {
+    listEl.innerHTML = `<div class="cal-hint">Tap a day to see its sessions and sign up.</div>`;
+  } else {
+    const pretty = new Date(calSelectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    listEl.innerHTML = `<div class="cal-selected-label">${pretty}</div>` + (selEvents.length
+      ? selEvents.map(buildEventCard).join('')
+      : `<div class="cal-hint">No open gym on this day.</div>`);
   }
 }
 
@@ -5805,6 +6007,7 @@ Object.assign(window, {
   sendFriendRequest, cancelFriendRequest, declineFriendRequest, acceptFriendRequest,
   removeFriend, switchMsgTab, openChatWithFriend, sendChatMessage, deleteChat,
   toggleAdminAlphaSort,
+  setScheduleView, calShiftMonth, calGoToday, calSelectDay,
   addSquadName, toggleSquadsPanel, resolveSquadMatch, shuffleTeams,
   openManualGroupBuilder, cancelManualGroupBuilder, createManualGroup, removeManualGroup,
   removeRegFromTeam, removeGuestFromTeam, restoreNoShowReg, restoreNoShowGuest,
